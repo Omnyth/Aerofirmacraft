@@ -1,0 +1,35 @@
+# Downloaded jars
+mods/*.jar
+
+# Minecraft generated folders
+logs/
+crash-reports/
+saves/
+screenshots/
+shaderpacks/
+resourcepacks/
+journeymap/
+xaero/
+local/
+backups/
+
+# Launcher/runtime files
+.minecraft/
+versions/
+libraries/
+assets/
+runtime/
+launcher_profiles.json
+usercache.json
+usernamecache.json
+
+# Configs that may contain local-only edits
+options.txt
+optionsof.txt
+servers.dat
+
+# OS/editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
