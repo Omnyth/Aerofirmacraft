@@ -1,4 +1,4 @@
-param(
+﻿param(
   [switch]$IncludeGregTech
 )
 
@@ -10,7 +10,7 @@ New-Item -ItemType Directory -Force -Path $ModsDir | Out-Null
 $coreMods = @(
   [PSCustomObject]@{ Name = "TerraFirmaCraft"; File = "TerraFirmaCraft-NeoForge-1.21.1-4.1.1.jar"; Url = "https://cdn.modrinth.com/data/JaCEZUhg/versions/3FO3as07/TerraFirmaCraft-NeoForge-1.21.1-4.1.1.jar"; Side = "both" }
   [PSCustomObject]@{ Name = "Patchouli"; File = "Patchouli-1.21.1-93-NEOFORGE.jar"; Url = "https://cdn.modrinth.com/data/nU0bVIaL/versions/BIogJv2D/Patchouli-1.21.1-93-NEOFORGE.jar"; Side = "both" }
-  [PSCustomObject]@{ Name = "Create"; File = "create-1.21.1-6.0.9.jar"; Url = "https://cdn.modrinth.com/data/LNytGWDc/versions/n7NADxiG/create-1.21.1-6.0.9.jar"; Side = "both" }
+  [PSCustomObject]@{ Name = "Create"; File = "create-1.21.1-6.0.10.jar"; Url = "https://cdn.modrinth.com/data/LNytGWDc/versions/UjX6dr61/create-1.21.1-6.0.10.jar"; Side = "both" }
   [PSCustomObject]@{ Name = "Sable"; File = "sable-neoforge-1.21.1-1.2.1.jar"; Url = "https://cdn.modrinth.com/data/T9PomCSv/versions/ADGYo8vU/sable-neoforge-1.21.1-1.2.1.jar"; Side = "both" }
   [PSCustomObject]@{ Name = "Create Aeronautics"; File = "create-aeronautics-bundled-1.21.1-1.2.1.jar"; Url = "https://cdn.modrinth.com/data/oWaK0Q19/versions/YhZLrAFC/create-aeronautics-bundled-1.21.1-1.2.1.jar"; Side = "both" }
   [PSCustomObject]@{ Name = "Just Enough Items"; File = "jei-1.21.1-neoforge-19.27.0.340.jar"; Url = "https://cdn.modrinth.com/data/u6dRKJwZ/versions/YAcQ6elZ/jei-1.21.1-neoforge-19.27.0.340.jar"; Side = "both" }
@@ -43,3 +43,4 @@ foreach ($mod in $allMods) {
 
 Write-Host "Done. Mods folder: $ModsDir"
 Write-Host "Note: World Preview TFC is client-only and was not downloaded."
+

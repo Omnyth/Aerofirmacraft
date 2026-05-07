@@ -1,105 +1,105 @@
-{
-  "name": "TFC Aeronautica Starter",
-  "minecraft": "1.21.1",
-  "loader": "NeoForge",
-  "java": "21",
-  "recommended_neoforge": "21.1.218+",
-  "description": "Prototype scaffold for TFC + Create + Create Aeronautics, with optional GregTech CEu Modern.",
-  "core_mods": [
-    {
-      "name": "TerraFirmaCraft",
-      "file": "TerraFirmaCraft-NeoForge-1.21.1-4.1.1.jar",
-      "url": "https://cdn.modrinth.com/data/JaCEZUhg/versions/3FO3as07/TerraFirmaCraft-NeoForge-1.21.1-4.1.1.jar",
-      "side": "both",
-      "notes": "Core TFC survival/worldgen."
-    },
-    {
-      "name": "Patchouli",
-      "file": "Patchouli-1.21.1-93-NEOFORGE.jar",
-      "url": "https://cdn.modrinth.com/data/nU0bVIaL/versions/BIogJv2D/Patchouli-1.21.1-93-NEOFORGE.jar",
-      "side": "both",
-      "notes": "Required by TFC."
-    },
-    {
-      "name": "Create",
-      "file": "create-1.21.1-6.0.9.jar",
-      "url": "https://cdn.modrinth.com/data/LNytGWDc/versions/n7NADxiG/create-1.21.1-6.0.9.jar",
-      "side": "both",
-      "notes": "Create mechanical progression. 6.0.9 is the current 1.21.1 NeoForge target used here."
-    },
-    {
-      "name": "Sable",
-      "file": "sable-neoforge-1.21.1-1.2.1.jar",
-      "url": "https://cdn.modrinth.com/data/T9PomCSv/versions/ADGYo8vU/sable-neoforge-1.21.1-1.2.1.jar",
-      "side": "both",
-      "notes": "Required by Create Aeronautics."
-    },
-    {
-      "name": "Create Aeronautics",
-      "file": "create-aeronautics-bundled-1.21.1-1.2.1.jar",
-      "url": "https://cdn.modrinth.com/data/oWaK0Q19/versions/YhZLrAFC/create-aeronautics-bundled-1.21.1-1.2.1.jar",
-      "side": "both",
-      "notes": "Airships/vehicles/physics contraptions."
-    },
-    {
-      "name": "Just Enough Items",
-      "file": "jei-1.21.1-neoforge-19.27.0.340.jar",
-      "url": "https://cdn.modrinth.com/data/u6dRKJwZ/versions/YAcQ6elZ/jei-1.21.1-neoforge-19.27.0.340.jar",
-      "side": "both",
-      "notes": "Recipe viewer."
-    },
-    {
-      "name": "KubeJS",
-      "file": "kubejs-neoforge-2101.7.2-build.295.jar",
-      "url": "https://cdn.modrinth.com/data/umyGl7zF/versions/YZqAKbnI/kubejs-neoforge-2101.7.2-build.295.jar",
-      "side": "both",
-      "notes": "Recipe/progression scripting."
-    },
-    {
-      "name": "Rhino",
-      "file": "rhino-2101.2.7-build.81.jar",
-      "url": "https://cdn.modrinth.com/data/sk9knFPE/versions/ZdLtebKH/rhino-2101.2.7-build.81.jar",
-      "side": "both",
-      "notes": "Required by KubeJS."
-    },
-    {
-      "name": "Jade",
-      "file": "Jade-1.21.1-NeoForge-15.10.5.jar",
-      "url": "https://cdn.modrinth.com/data/nvQzSEkH/versions/yd8FKCmx/Jade-1.21.1-NeoForge-15.10.5.jar",
-      "side": "both",
-      "notes": "Block/entity info overlay."
-    }
-  ],
-  "client_only_mods": [
-    {
-      "name": "World Preview TFC",
-      "file": "world_preview_tfc-2.0.1.jar",
-      "url": "https://cdn.modrinth.com/data/LEqrn5wh/versions/owwYzHd9/world_preview_tfc-2.0.1.jar",
-      "side": "client",
-      "notes": "Client-only TFC seed/world preview tool. Do not put this on a dedicated server."
-    }
-  ],
-  "optional_gregtech_mods": [
-    {
-      "name": "GregTech CEu Modern",
-      "file": "gtceu-1.21.1-1.4.4.jar",
-      "url": "https://cdn.modrinth.com/data/7tG215v7/versions/OdpXbS3h/gtceu-1.21.1-1.4.4.jar",
-      "side": "both",
-      "notes": "Optional. Adds GregTech. 1.21.1 branch is beta and should be tested separately."
-    },
-    {
-      "name": "Configuration",
-      "file": "configuration-neoforge-1.21.1-3.1.1.jar",
-      "url": "https://cdn.modrinth.com/data/3WjjSM5O/versions/6Mztfq1u/configuration-neoforge-1.21.1-3.1.1.jar",
-      "side": "both",
-      "notes": "Required by GregTech CEu Modern."
-    },
-    {
-      "name": "LDLib",
-      "file": "ldlib-neoforge-1.21.1-1.0.29.b.jar",
-      "url": "https://cdn.modrinth.com/data/B1CBVXHX/versions/YNLkNCSo/ldlib-neoforge-1.21.1-1.0.29.b.jar",
-      "side": "both",
-      "notes": "Required by GregTech CEu Modern. I used 1.0.29.b because later LDLib versions have had reported GT texture/UI issues in some setups."
-    }
-  ]
+﻿{
+    "name":  "TFC Aeronautica Starter",
+    "minecraft":  "1.21.1",
+    "loader":  "NeoForge",
+    "java":  "21",
+    "recommended_neoforge":  "21.1.218+",
+    "description":  "Prototype scaffold for TFC + Create + Create Aeronautics, with optional GregTech CEu Modern.",
+    "core_mods":  [
+                      {
+                          "name":  "TerraFirmaCraft",
+                          "file":  "TerraFirmaCraft-NeoForge-1.21.1-4.1.1.jar",
+                          "url":  "https://cdn.modrinth.com/data/JaCEZUhg/versions/3FO3as07/TerraFirmaCraft-NeoForge-1.21.1-4.1.1.jar",
+                          "side":  "both",
+                          "notes":  "Core TFC survival/worldgen."
+                      },
+                      {
+                          "name":  "Patchouli",
+                          "file":  "Patchouli-1.21.1-93-NEOFORGE.jar",
+                          "url":  "https://cdn.modrinth.com/data/nU0bVIaL/versions/BIogJv2D/Patchouli-1.21.1-93-NEOFORGE.jar",
+                          "side":  "both",
+                          "notes":  "Required by TFC."
+                      },
+                      {
+                          "name":  "Create",
+                          "file":  "create-1.21.1-6.0.10.jar",
+                          "url":  "https://cdn.modrinth.com/data/LNytGWDc/versions/UjX6dr61/create-1.21.1-6.0.10.jar",
+                          "side":  "both",
+                          "notes":  "Create mechanical progression. Updated to latest appropriate 1.21.1 NeoForge release after boot test."
+                      },
+                      {
+                          "name":  "Sable",
+                          "file":  "sable-neoforge-1.21.1-1.2.1.jar",
+                          "url":  "https://cdn.modrinth.com/data/T9PomCSv/versions/ADGYo8vU/sable-neoforge-1.21.1-1.2.1.jar",
+                          "side":  "both",
+                          "notes":  "Required by Create Aeronautics."
+                      },
+                      {
+                          "name":  "Create Aeronautics",
+                          "file":  "create-aeronautics-bundled-1.21.1-1.2.1.jar",
+                          "url":  "https://cdn.modrinth.com/data/oWaK0Q19/versions/YhZLrAFC/create-aeronautics-bundled-1.21.1-1.2.1.jar",
+                          "side":  "both",
+                          "notes":  "Airships/vehicles/physics contraptions."
+                      },
+                      {
+                          "name":  "Just Enough Items",
+                          "file":  "jei-1.21.1-neoforge-19.27.0.340.jar",
+                          "url":  "https://cdn.modrinth.com/data/u6dRKJwZ/versions/YAcQ6elZ/jei-1.21.1-neoforge-19.27.0.340.jar",
+                          "side":  "both",
+                          "notes":  "Recipe viewer."
+                      },
+                      {
+                          "name":  "KubeJS",
+                          "file":  "kubejs-neoforge-2101.7.2-build.295.jar",
+                          "url":  "https://cdn.modrinth.com/data/umyGl7zF/versions/YZqAKbnI/kubejs-neoforge-2101.7.2-build.295.jar",
+                          "side":  "both",
+                          "notes":  "Recipe/progression scripting."
+                      },
+                      {
+                          "name":  "Rhino",
+                          "file":  "rhino-2101.2.7-build.81.jar",
+                          "url":  "https://cdn.modrinth.com/data/sk9knFPE/versions/ZdLtebKH/rhino-2101.2.7-build.81.jar",
+                          "side":  "both",
+                          "notes":  "Required by KubeJS."
+                      },
+                      {
+                          "name":  "Jade",
+                          "file":  "Jade-1.21.1-NeoForge-15.10.5.jar",
+                          "url":  "https://cdn.modrinth.com/data/nvQzSEkH/versions/yd8FKCmx/Jade-1.21.1-NeoForge-15.10.5.jar",
+                          "side":  "both",
+                          "notes":  "Block/entity info overlay."
+                      }
+                  ],
+    "client_only_mods":  [
+                             {
+                                 "name":  "World Preview TFC",
+                                 "file":  "world_preview_tfc-2.0.1.jar",
+                                 "url":  "https://cdn.modrinth.com/data/LEqrn5wh/versions/owwYzHd9/world_preview_tfc-2.0.1.jar",
+                                 "side":  "client",
+                                 "notes":  "Client-only TFC seed/world preview tool. Do not put this on a dedicated server."
+                             }
+                         ],
+    "optional_gregtech_mods":  [
+                                   {
+                                       "name":  "GregTech CEu Modern",
+                                       "file":  "gtceu-1.21.1-1.4.4.jar",
+                                       "url":  "https://cdn.modrinth.com/data/7tG215v7/versions/OdpXbS3h/gtceu-1.21.1-1.4.4.jar",
+                                       "side":  "both",
+                                       "notes":  "Optional. Adds GregTech. 1.21.1 branch is beta and should be tested separately."
+                                   },
+                                   {
+                                       "name":  "Configuration",
+                                       "file":  "configuration-neoforge-1.21.1-3.1.1.jar",
+                                       "url":  "https://cdn.modrinth.com/data/3WjjSM5O/versions/6Mztfq1u/configuration-neoforge-1.21.1-3.1.1.jar",
+                                       "side":  "both",
+                                       "notes":  "Required by GregTech CEu Modern."
+                                   },
+                                   {
+                                       "name":  "LDLib",
+                                       "file":  "ldlib-neoforge-1.21.1-1.0.29.b.jar",
+                                       "url":  "https://cdn.modrinth.com/data/B1CBVXHX/versions/YNLkNCSo/ldlib-neoforge-1.21.1-1.0.29.b.jar",
+                                       "side":  "both",
+                                       "notes":  "Required by GregTech CEu Modern. I used 1.0.29.b because later LDLib versions have had reported GT texture/UI issues in some setups."
+                                   }
+                               ]
 }

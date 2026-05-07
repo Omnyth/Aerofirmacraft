@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 set -euo pipefail
 
 INCLUDE_GREGTECH="false"
@@ -15,7 +15,7 @@ mkdir -p "$MODS_DIR"
 CORE_MODS=(
   'TerraFirmaCraft|TerraFirmaCraft-NeoForge-1.21.1-4.1.1.jar|https://cdn.modrinth.com/data/JaCEZUhg/versions/3FO3as07/TerraFirmaCraft-NeoForge-1.21.1-4.1.1.jar'
   'Patchouli|Patchouli-1.21.1-93-NEOFORGE.jar|https://cdn.modrinth.com/data/nU0bVIaL/versions/BIogJv2D/Patchouli-1.21.1-93-NEOFORGE.jar'
-  'Create|create-1.21.1-6.0.9.jar|https://cdn.modrinth.com/data/LNytGWDc/versions/n7NADxiG/create-1.21.1-6.0.9.jar'
+  'Create|create-1.21.1-6.0.10.jar|https://cdn.modrinth.com/data/LNytGWDc/versions/UjX6dr61/create-1.21.1-6.0.10.jar'
   'Sable|sable-neoforge-1.21.1-1.2.1.jar|https://cdn.modrinth.com/data/T9PomCSv/versions/ADGYo8vU/sable-neoforge-1.21.1-1.2.1.jar'
   'Create Aeronautics|create-aeronautics-bundled-1.21.1-1.2.1.jar|https://cdn.modrinth.com/data/oWaK0Q19/versions/YhZLrAFC/create-aeronautics-bundled-1.21.1-1.2.1.jar'
   'Just Enough Items|jei-1.21.1-neoforge-19.27.0.340.jar|https://cdn.modrinth.com/data/u6dRKJwZ/versions/YAcQ6elZ/jei-1.21.1-neoforge-19.27.0.340.jar'
@@ -48,3 +48,4 @@ fi
 
 echo "Done. Mods folder: $MODS_DIR"
 echo "Note: World Preview TFC is client-only and was not downloaded."
+
