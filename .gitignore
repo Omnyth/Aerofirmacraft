@@ -1,17 +1,17 @@
-# Downloaded jars
+﻿# Downloaded mod jars
 mods/*.jar
 
-# Minecraft generated folders
+# Minecraft generated folders/files
 logs/
 crash-reports/
 saves/
 screenshots/
+backups/
 shaderpacks/
 resourcepacks/
 journeymap/
 xaero/
 local/
-backups/
 
 # Launcher/runtime files
 .minecraft/
@@ -23,7 +23,7 @@ launcher_profiles.json
 usercache.json
 usernamecache.json
 
-# Configs that may contain local-only edits
+# Local settings
 options.txt
 optionsof.txt
 servers.dat
