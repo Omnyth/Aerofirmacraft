@@ -159,3 +159,20 @@ Behavior:
 
 Success:
 Markers appear or at least log as placed, and world loading does not stall.
+
+## Current branch: terrain-tfc-noise-small-carve-prototype
+
+Goal:
+Test the smallest useful terrain removal during TFCChunkGenerator.fillFromNoise completion.
+
+Behavior:
+- mutate one ProtoChunk only
+- carve a 4x4 shaft around the chunk center
+- place a glowstone floor
+- log teleport coordinates
+- do not use serverLevel.setBlock
+- do not use ChunkEvent.Load
+- do not mass-carve terrain
+
+Success:
+World loads without stalling and latest.log contains AFC small carve: applied.

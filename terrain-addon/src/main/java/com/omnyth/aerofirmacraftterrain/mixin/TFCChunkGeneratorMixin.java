@@ -2,8 +2,10 @@ package com.omnyth.aerofirmacraftterrain.mixin;
 
 import com.omnyth.aerofirmacraftterrain.AerofirmacraftTerrain;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.blending.Blender;
@@ -13,15 +15,14 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Mixin(targets = "net.dries007.tfc.world.TFCChunkGenerator", remap = false)
 public abstract class TFCChunkGeneratorMixin {
-    private static final int AFC_MARKER_LIMIT = 12;
-    private static final AtomicInteger AFC_MARKER_COUNT = new AtomicInteger();
+    private static final AtomicBoolean AFC_DID_SMALL_CARVE = new AtomicBoolean(false);
 
     @Inject(method = "fillFromNoise", at = @At("RETURN"))
-    private void afc$placeTinyNoiseStageMarker(
+    private void afc$smallNoiseStageCarve(
             final Blender blender,
             final RandomState randomState,
             final StructureManager structureManager,
@@ -32,7 +33,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (future == null) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC noise marker: fillFromNoise returned null future for chunkX={} chunkZ={}",
+                    "AFC small carve: fillFromNoise returned null future for chunkX={} chunkZ={}",
                     chunk.getPos().x,
                     chunk.getPos().z
             );
@@ -42,7 +43,7 @@ public abstract class TFCChunkGeneratorMixin {
         future.whenComplete((result, throwable) -> {
             if (throwable != null) {
                 AerofirmacraftTerrain.LOGGER.error(
-                        "AFC noise marker: fillFromNoise future failed for chunkX={} chunkZ={}",
+                        "AFC small carve: fillFromNoise future failed for chunkX={} chunkZ={}",
                         chunk.getPos().x,
                         chunk.getPos().z,
                         throwable
@@ -50,51 +51,72 @@ public abstract class TFCChunkGeneratorMixin {
                 return;
             }
 
-            final int count = AFC_MARKER_COUNT.incrementAndGet();
-
-            if (count > AFC_MARKER_LIMIT) {
-                if (count == AFC_MARKER_LIMIT + 1) {
-                    AerofirmacraftTerrain.LOGGER.info(
-                            "AFC noise marker: marker limit reached. Further marker placement suppressed."
-                    );
-                }
+            if (!AFC_DID_SMALL_CARVE.compareAndSet(false, true)) {
                 return;
             }
 
-            placeMarker(result, count);
+            carveOneSmallShaft(result);
         });
     }
 
-    private static void placeMarker(final ChunkAccess chunk, final int count) {
-        final int worldX = chunk.getPos().getBlockX(8);
-        final int worldZ = chunk.getPos().getBlockZ(8);
-
+    private static void carveOneSmallShaft(final ChunkAccess chunk) {
         final int minY = chunk.getHeightAccessorForGeneration().getMinBuildHeight();
         final int maxY = chunk.getHeightAccessorForGeneration().getMaxBuildHeight() - 1;
 
-        final int surfaceY = findTopNonAirY(chunk, worldX, worldZ, minY, maxY);
-        final int markerY = clamp(surfaceY + 4, minY + 4, maxY - 3);
+        final int centerWorldX = chunk.getPos().getBlockX(8);
+        final int centerWorldZ = chunk.getPos().getBlockZ(8);
+
+        final int surfaceY = findTopNonAirY(chunk, centerWorldX, centerWorldZ, minY, maxY);
+        final int carveTopY = clamp(surfaceY + 3, minY + 8, maxY - 2);
+        final int floorY = clamp(surfaceY - 10, minY + 1, carveTopY - 1);
+
+        final BlockState air = Blocks.AIR.defaultBlockState();
+        final BlockState glowstone = Blocks.GLOWSTONE.defaultBlockState();
 
         final BlockPos.MutableBlockPos mutablePos = new BlockPos.MutableBlockPos();
 
-        for (int dy = 0; dy < 3; dy++) {
-            mutablePos.set(worldX, markerY + dy, worldZ);
-            chunk.setBlockState(mutablePos, Blocks.GLOWSTONE.defaultBlockState(), false);
+        int airBlocks = 0;
+        int markerBlocks = 0;
+
+        for (int localX = 6; localX <= 9; localX++) {
+            for (int localZ = 6; localZ <= 9; localZ++) {
+                final int worldX = chunk.getPos().getBlockX(localX);
+                final int worldZ = chunk.getPos().getBlockZ(localZ);
+
+                mutablePos.set(worldX, floorY, worldZ);
+                chunk.setBlockState(mutablePos, glowstone, false);
+                markerBlocks++;
+
+                for (int y = floorY + 1; y <= carveTopY; y++) {
+                    mutablePos.set(worldX, y, worldZ);
+                    chunk.setBlockState(mutablePos, air, false);
+                    airBlocks++;
+                }
+            }
         }
 
         chunk.setUnsaved(true);
 
+        final BlockState originalCenterState = chunk.getBlockState(new BlockPos(centerWorldX, surfaceY, centerWorldZ));
+        final String originalCenterBlock = BuiltInRegistries.BLOCK.getKey(originalCenterState.getBlock()).toString();
+
         AerofirmacraftTerrain.LOGGER.info(
-                "AFC noise marker: placed count={} chunkX={} chunkZ={} worldX={} worldZ={} surfaceY={} markerY={} chunkStatus={} chunkClass={}",
-                count,
+                "AFC small carve: applied chunkX={} chunkZ={} centerX={} centerZ={} surfaceY={} floorY={} carveTopY={} airBlocks={} markerBlocks={} centerBlock={} chunkStatus={} chunkClass={} tpHint='/tp @s {} {} {}'",
                 chunk.getPos().x,
                 chunk.getPos().z,
-                worldX,
-                worldZ,
+                centerWorldX,
+                centerWorldZ,
                 surfaceY,
-                markerY,
+                floorY,
+                carveTopY,
+                airBlocks,
+                markerBlocks,
+                originalCenterBlock,
                 chunk.getPersistedStatus(),
-                chunk.getClass().getName()
+                chunk.getClass().getName(),
+                centerWorldX,
+                carveTopY + 3,
+                centerWorldZ
         );
     }
 

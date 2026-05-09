@@ -14,10 +14,10 @@ public final class AerofirmacraftTerrain {
     public AerofirmacraftTerrain(IEventBus modEventBus) {
         modEventBus.addListener(this::commonSetup);
 
-        LOGGER.info("Aerofirmacraft Terrain constructed. TFC noise-stage marker prototype active.");
+        LOGGER.info("Aerofirmacraft Terrain constructed. TFC noise-stage small carve prototype active.");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        LOGGER.info("Aerofirmacraft Terrain common setup complete. Tiny ProtoChunk marker mutation only.");
+        LOGGER.info("Aerofirmacraft Terrain common setup complete. One-chunk 4x4 ProtoChunk carve only.");
     }
 }
