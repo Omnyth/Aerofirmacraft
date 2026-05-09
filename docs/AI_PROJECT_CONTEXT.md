@@ -46,3 +46,17 @@ Confirmed log output:
 Current addon behavior:
 - No terrain changes.
 - Lifecycle logging only.
+
+## Current branch: terrain-worldgen-diagnostics
+
+Goal:
+Add diagnostics only.
+
+This branch should confirm:
+- the addon sees server level load events
+- the addon sees newly generated overworld chunks
+- the addon records chunk status and height range
+- no terrain changes occur
+
+Important:
+Do not inspect or mutate chunk block contents in ChunkEvent.Load yet.
