@@ -145,3 +145,17 @@ Current behavior:
 - log at HEAD
 - log when returned CompletableFuture completes
 - no terrain mutation
+
+## Current branch: terrain-tfc-noise-marker-prototype
+
+Goal:
+Perform the smallest possible terrain mutation inside TFCChunkGenerator.fillFromNoise completion.
+
+Behavior:
+- place a 3-block glowstone marker in the center of the first 12 generated chunks
+- mutate the ProtoChunk directly with ChunkAccess#setBlockState
+- do not use serverLevel.setBlock
+- do not mass-carve terrain
+
+Success:
+Markers appear or at least log as placed, and world loading does not stall.

@@ -14,10 +14,10 @@ public final class AerofirmacraftTerrain {
     public AerofirmacraftTerrain(IEventBus modEventBus) {
         modEventBus.addListener(this::commonSetup);
 
-        LOGGER.info("Aerofirmacraft Terrain constructed. TFC fillFromNoise mixin canary branch active. No terrain mutation.");
+        LOGGER.info("Aerofirmacraft Terrain constructed. TFC noise-stage marker prototype active.");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        LOGGER.info("Aerofirmacraft Terrain common setup complete. TFC fillFromNoise mixin canary only.");
+        LOGGER.info("Aerofirmacraft Terrain common setup complete. Tiny ProtoChunk marker mutation only.");
     }
 }

@@ -1,7 +1,9 @@
 package com.omnyth.aerofirmacraftterrain.mixin;
 
 import com.omnyth.aerofirmacraftterrain.AerofirmacraftTerrain;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.StructureManager;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.blending.Blender;
@@ -15,40 +17,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 @Mixin(targets = "net.dries007.tfc.world.TFCChunkGenerator", remap = false)
 public abstract class TFCChunkGeneratorMixin {
-    private static final int AFC_FILL_FROM_NOISE_LOG_LIMIT = 32;
-    private static final AtomicInteger AFC_FILL_FROM_NOISE_HEAD_COUNT = new AtomicInteger();
-    private static final AtomicInteger AFC_FILL_FROM_NOISE_COMPLETE_COUNT = new AtomicInteger();
-
-    @Inject(method = "fillFromNoise", at = @At("HEAD"))
-    private void afc$fillFromNoiseHead(
-            final Blender blender,
-            final RandomState randomState,
-            final StructureManager structureManager,
-            final ChunkAccess chunk,
-            final CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir
-    ) {
-        final int count = AFC_FILL_FROM_NOISE_HEAD_COUNT.incrementAndGet();
-
-        if (count <= AFC_FILL_FROM_NOISE_LOG_LIMIT) {
-            AerofirmacraftTerrain.LOGGER.info(
-                    "AFC mixin canary: TFC fillFromNoise HEAD count={} chunkX={} chunkZ={} chunkClass={} status={} minY={} maxY={}",
-                    count,
-                    chunk.getPos().x,
-                    chunk.getPos().z,
-                    chunk.getClass().getName(),
-                    chunk.getPersistedStatus(),
-                    chunk.getHeightAccessorForGeneration().getMinBuildHeight(),
-                    chunk.getHeightAccessorForGeneration().getMaxBuildHeight()
-            );
-        } else if (count == AFC_FILL_FROM_NOISE_LOG_LIMIT + 1) {
-            AerofirmacraftTerrain.LOGGER.info(
-                    "AFC mixin canary: TFC fillFromNoise HEAD log limit reached. Further HEAD logs suppressed."
-            );
-        }
-    }
+    private static final int AFC_MARKER_LIMIT = 12;
+    private static final AtomicInteger AFC_MARKER_COUNT = new AtomicInteger();
 
     @Inject(method = "fillFromNoise", at = @At("RETURN"))
-    private void afc$fillFromNoiseReturn(
+    private void afc$placeTinyNoiseStageMarker(
             final Blender blender,
             final RandomState randomState,
             final StructureManager structureManager,
@@ -59,7 +32,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (future == null) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC mixin canary: TFC fillFromNoise RETURN had null future for chunkX={} chunkZ={}",
+                    "AFC noise marker: fillFromNoise returned null future for chunkX={} chunkZ={}",
                     chunk.getPos().x,
                     chunk.getPos().z
             );
@@ -67,21 +40,9 @@ public abstract class TFCChunkGeneratorMixin {
         }
 
         future.whenComplete((result, throwable) -> {
-            final int count = AFC_FILL_FROM_NOISE_COMPLETE_COUNT.incrementAndGet();
-
-            if (count > AFC_FILL_FROM_NOISE_LOG_LIMIT) {
-                if (count == AFC_FILL_FROM_NOISE_LOG_LIMIT + 1) {
-                    AerofirmacraftTerrain.LOGGER.info(
-                            "AFC mixin canary: TFC fillFromNoise COMPLETE log limit reached. Further COMPLETE logs suppressed."
-                    );
-                }
-                return;
-            }
-
             if (throwable != null) {
                 AerofirmacraftTerrain.LOGGER.error(
-                        "AFC mixin canary: TFC fillFromNoise COMPLETE failed. count={} chunkX={} chunkZ={}",
-                        count,
+                        "AFC noise marker: fillFromNoise future failed for chunkX={} chunkZ={}",
                         chunk.getPos().x,
                         chunk.getPos().z,
                         throwable
@@ -89,14 +50,75 @@ public abstract class TFCChunkGeneratorMixin {
                 return;
             }
 
-            AerofirmacraftTerrain.LOGGER.info(
-                    "AFC mixin canary: TFC fillFromNoise COMPLETE count={} chunkX={} chunkZ={} resultClass={} resultStatus={}",
-                    count,
-                    result.getPos().x,
-                    result.getPos().z,
-                    result.getClass().getName(),
-                    result.getPersistedStatus()
-            );
+            final int count = AFC_MARKER_COUNT.incrementAndGet();
+
+            if (count > AFC_MARKER_LIMIT) {
+                if (count == AFC_MARKER_LIMIT + 1) {
+                    AerofirmacraftTerrain.LOGGER.info(
+                            "AFC noise marker: marker limit reached. Further marker placement suppressed."
+                    );
+                }
+                return;
+            }
+
+            placeMarker(result, count);
         });
+    }
+
+    private static void placeMarker(final ChunkAccess chunk, final int count) {
+        final int worldX = chunk.getPos().getBlockX(8);
+        final int worldZ = chunk.getPos().getBlockZ(8);
+
+        final int minY = chunk.getHeightAccessorForGeneration().getMinBuildHeight();
+        final int maxY = chunk.getHeightAccessorForGeneration().getMaxBuildHeight() - 1;
+
+        final int surfaceY = findTopNonAirY(chunk, worldX, worldZ, minY, maxY);
+        final int markerY = clamp(surfaceY + 4, minY + 4, maxY - 3);
+
+        final BlockPos.MutableBlockPos mutablePos = new BlockPos.MutableBlockPos();
+
+        for (int dy = 0; dy < 3; dy++) {
+            mutablePos.set(worldX, markerY + dy, worldZ);
+            chunk.setBlockState(mutablePos, Blocks.GLOWSTONE.defaultBlockState(), false);
+        }
+
+        chunk.setUnsaved(true);
+
+        AerofirmacraftTerrain.LOGGER.info(
+                "AFC noise marker: placed count={} chunkX={} chunkZ={} worldX={} worldZ={} surfaceY={} markerY={} chunkStatus={} chunkClass={}",
+                count,
+                chunk.getPos().x,
+                chunk.getPos().z,
+                worldX,
+                worldZ,
+                surfaceY,
+                markerY,
+                chunk.getPersistedStatus(),
+                chunk.getClass().getName()
+        );
+    }
+
+    private static int findTopNonAirY(
+            final ChunkAccess chunk,
+            final int worldX,
+            final int worldZ,
+            final int minY,
+            final int maxY
+    ) {
+        final BlockPos.MutableBlockPos mutablePos = new BlockPos.MutableBlockPos();
+
+        for (int y = maxY; y >= minY; y--) {
+            mutablePos.set(worldX, y, worldZ);
+
+            if (!chunk.getBlockState(mutablePos).isAir()) {
+                return y;
+            }
+        }
+
+        return minY;
+    }
+
+    private static int clamp(final int value, final int min, final int max) {
+        return Math.max(min, Math.min(max, value));
     }
 }
