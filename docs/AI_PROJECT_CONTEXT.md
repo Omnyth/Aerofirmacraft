@@ -46,3 +46,86 @@ Confirmed log output:
 Current addon behavior:
 - No terrain changes.
 - Lifecycle logging only.
+
+## Current branch: terrain-worldgen-diagnostics
+
+Goal:
+Add diagnostics only.
+
+This branch should confirm:
+- the addon sees server level load events
+- the addon sees newly generated overworld chunks
+- the addon records chunk status and height range
+- no terrain changes occur
+
+Important:
+Do not inspect or mutate chunk block contents in ChunkEvent.Load yet.
+
+## Diagnostics v2
+
+The first diagnostics pass confirmed:
+- server level load events are visible
+- overworld/nether/end dimensions are visible
+- overworld build height is -64 to 320
+- server starting event is visible
+
+The first pass did not show new chunk logs, so v2 broadens ChunkEvent.Load logging:
+- logs first 64 overworld chunk load events
+- includes event.isNewChunk()
+- still does not inspect or mutate block data
+
+## Surface sampling diagnostics
+
+Chunk diagnostics confirmed that ChunkEvent.Load sees new overworld chunks, but only at full generated status.
+
+Next diagnostic step:
+- read-only center-column samples
+- record WORLD_SURFACE and OCEAN_FLOOR heights
+- record surface block ID
+- record whether water fluid is present
+
+This is still diagnostics only. No terrain modification.
+
+## Chunk summary diagnostics
+
+Surface sampling confirmed land/highland samples around spawn.
+
+Next diagnostic step:
+- summarize all 256 columns per new overworld chunk
+- classify chunks as solid_land, solid_land_high_relief, mostly_water, mixed_shore_or_river, mostly_air, or mixed_unknown
+- continue read-only diagnostics only
+
+## Chunk classifier correction
+
+The first 16x16 chunk summary pass showed TFC salt water surfaces as dominantSurface=tfc:fluid/salt_water, but those columns were being counted as solid.
+
+Classifier updated:
+- tfc:fluid/* is now treated as fluid
+- block IDs containing water are treated as fluid
+- plants/leaves are treated as land surface rather than separate non-land columns
+
+Goal:
+Get reliable rough classes for open water, shore, coastal land, and normal land.
+
+## Chunk classifier verified
+
+Date: 2026-05-09
+
+The corrected chunk classifier was tested in a fresh CurseForge Aerofirmacraft world.
+
+Confirmed classes:
+- open_water_deep
+- shore_mixed
+- shore_edge
+- low_coastal_land
+- land
+
+Confirmed TFC fluid handling:
+- tfc:fluid/salt_water is now counted as fluid.
+- Open water chunks can show fluidColumns=256.
+- Shore chunks show mixed landColumns/fluidColumns.
+- Land chunks show landColumns near 256.
+
+Conclusion:
+The diagnostic classifier is useful enough to inform the first crude terrain transform prototype.
+ChunkEvent.Load sees chunks at minecraft:full status, so it is likely too late for clean worldgen-stage shaping, but it may be usable for a crude post-generation proof of concept.
