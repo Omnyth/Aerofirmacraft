@@ -33,3 +33,5 @@ servers.dat
 Thumbs.db
 .vscode/
 .idea/
+
+_backups/
