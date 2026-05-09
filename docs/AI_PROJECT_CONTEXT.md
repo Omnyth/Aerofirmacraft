@@ -73,3 +73,15 @@ The first pass did not show new chunk logs, so v2 broadens ChunkEvent.Load loggi
 - logs first 64 overworld chunk load events
 - includes event.isNewChunk()
 - still does not inspect or mutate block data
+
+## Surface sampling diagnostics
+
+Chunk diagnostics confirmed that ChunkEvent.Load sees new overworld chunks, but only at full generated status.
+
+Next diagnostic step:
+- read-only center-column samples
+- record WORLD_SURFACE and OCEAN_FLOOR heights
+- record surface block ID
+- record whether water fluid is present
+
+This is still diagnostics only. No terrain modification.
