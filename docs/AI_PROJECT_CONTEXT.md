@@ -129,3 +129,21 @@ Confirmed TFC fluid handling:
 Conclusion:
 The diagnostic classifier is useful enough to inform the first crude terrain transform prototype.
 ChunkEvent.Load sees chunks at minecraft:full status, so it is likely too late for clean worldgen-stage shaping, but it may be usable for a crude post-generation proof of concept.
+
+## Crude post-generation transform rejected
+
+The first crude transform prototype attempted to edit full chunks from ChunkEvent.Load.
+
+Result:
+- world loading appeared to hang around 4%
+- likely caused by mass serverLevel.setBlock calls during chunk load/spawn generation
+- behavior resembles old structure mods causing cascading chunk/worldgen lag
+
+Decision:
+Do not use ChunkEvent.Load for full terrain shaping.
+
+Next branch:
+terrain-hook-discovery
+
+Goal:
+Find an earlier worldgen-stage hook before chunk status reaches minecraft:full.
