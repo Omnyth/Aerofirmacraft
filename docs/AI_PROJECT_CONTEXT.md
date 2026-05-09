@@ -60,3 +60,16 @@ This branch should confirm:
 
 Important:
 Do not inspect or mutate chunk block contents in ChunkEvent.Load yet.
+
+## Diagnostics v2
+
+The first diagnostics pass confirmed:
+- server level load events are visible
+- overworld/nether/end dimensions are visible
+- overworld build height is -64 to 320
+- server starting event is visible
+
+The first pass did not show new chunk logs, so v2 broadens ChunkEvent.Load logging:
+- logs first 64 overworld chunk load events
+- includes event.isNewChunk()
+- still does not inspect or mutate block data

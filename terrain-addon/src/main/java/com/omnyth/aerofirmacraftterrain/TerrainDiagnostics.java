@@ -12,8 +12,8 @@ import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public final class TerrainDiagnostics {
-    private static final int NEW_CHUNK_LOG_LIMIT = 32;
-    private static final AtomicInteger NEW_CHUNK_LOG_COUNT = new AtomicInteger();
+    private static final int OVERWORLD_CHUNK_LOAD_LOG_LIMIT = 64;
+    private static final AtomicInteger OVERWORLD_CHUNK_LOAD_LOG_COUNT = new AtomicInteger();
 
     @SubscribeEvent
     public void onServerStarting(final ServerStartingEvent event) {
@@ -53,16 +53,12 @@ public final class TerrainDiagnostics {
             return;
         }
 
-        if (!event.isNewChunk()) {
-            return;
-        }
+        final int count = OVERWORLD_CHUNK_LOAD_LOG_COUNT.incrementAndGet();
 
-        final int count = NEW_CHUNK_LOG_COUNT.incrementAndGet();
-
-        if (count > NEW_CHUNK_LOG_LIMIT) {
-            if (count == NEW_CHUNK_LOG_LIMIT + 1) {
+        if (count > OVERWORLD_CHUNK_LOAD_LOG_LIMIT) {
+            if (count == OVERWORLD_CHUNK_LOAD_LOG_LIMIT + 1) {
                 AerofirmacraftTerrain.LOGGER.info(
-                        "AFC terrain diagnostics: new overworld chunk log limit reached. Further new chunk logs suppressed."
+                        "AFC terrain diagnostics: overworld chunk load log limit reached. Further chunk-load logs suppressed."
                 );
             }
             return;
@@ -71,13 +67,16 @@ public final class TerrainDiagnostics {
         final ChunkAccess chunk = event.getChunk();
 
         AerofirmacraftTerrain.LOGGER.info(
-                "AFC terrain diagnostics: new overworld chunk loaded. chunkX={} chunkZ={} persistedStatus={} highestGeneratedStatus={} minY={} maxY={}",
+                "AFC terrain diagnostics: overworld chunk load. count={} chunkX={} chunkZ={} isNewChunk={} persistedStatus={} highestGeneratedStatus={} minY={} maxY={} chunkClass={}",
+                count,
                 chunk.getPos().x,
                 chunk.getPos().z,
+                event.isNewChunk(),
                 chunk.getPersistedStatus(),
                 chunk.getHighestGeneratedStatus(),
                 serverLevel.getMinBuildHeight(),
-                serverLevel.getMaxBuildHeight()
+                serverLevel.getMaxBuildHeight(),
+                chunk.getClass().getName()
         );
     }
 }
