@@ -15,14 +15,13 @@ import net.neoforged.neoforge.event.level.ChunkEvent;
 import net.neoforged.neoforge.event.level.LevelEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public final class TerrainDiagnostics {
-    private static final int OVERWORLD_CHUNK_LOAD_LOG_LIMIT = 32;
-    private static final int SURFACE_SAMPLE_LOG_LIMIT = 24;
-
-    private static final AtomicInteger OVERWORLD_CHUNK_LOAD_LOG_COUNT = new AtomicInteger();
-    private static final AtomicInteger SURFACE_SAMPLE_LOG_COUNT = new AtomicInteger();
+    private static final int CHUNK_SUMMARY_LOG_LIMIT = 40;
+    private static final AtomicInteger CHUNK_SUMMARY_LOG_COUNT = new AtomicInteger();
 
     @SubscribeEvent
     public void onServerStarting(final ServerStartingEvent event) {
@@ -44,11 +43,6 @@ public final class TerrainDiagnostics {
                     serverLevel.getMaxBuildHeight(),
                     serverLevel.getChunkSource().getClass().getName()
             );
-        } else {
-            AerofirmacraftTerrain.LOGGER.info(
-                    "AFC terrain diagnostics: non-server level loaded. levelClass={}",
-                    level.getClass().getName()
-            );
         }
     }
 
@@ -62,82 +56,129 @@ public final class TerrainDiagnostics {
             return;
         }
 
-        final ChunkAccess chunk = event.getChunk();
+        if (!event.isNewChunk()) {
+            return;
+        }
 
-        logChunkLoad(serverLevel, chunk, event.isNewChunk());
-        logSurfaceSample(serverLevel, chunk, event.isNewChunk());
-    }
+        final int count = CHUNK_SUMMARY_LOG_COUNT.incrementAndGet();
 
-    private static void logChunkLoad(final ServerLevel serverLevel, final ChunkAccess chunk, final boolean isNewChunk) {
-        final int count = OVERWORLD_CHUNK_LOAD_LOG_COUNT.incrementAndGet();
-
-        if (count > OVERWORLD_CHUNK_LOAD_LOG_LIMIT) {
-            if (count == OVERWORLD_CHUNK_LOAD_LOG_LIMIT + 1) {
+        if (count > CHUNK_SUMMARY_LOG_LIMIT) {
+            if (count == CHUNK_SUMMARY_LOG_LIMIT + 1) {
                 AerofirmacraftTerrain.LOGGER.info(
-                        "AFC terrain diagnostics: overworld chunk load log limit reached. Further chunk-load logs suppressed."
+                        "AFC chunk summary: log limit reached. Further chunk summaries suppressed."
                 );
             }
             return;
         }
 
+        logChunkSummary(serverLevel, event.getChunk(), count);
+    }
+
+    private static void logChunkSummary(final ServerLevel serverLevel, final ChunkAccess chunk, final int count) {
+        int minSurfaceY = Integer.MAX_VALUE;
+        int maxSurfaceY = Integer.MIN_VALUE;
+        int minOceanFloorY = Integer.MAX_VALUE;
+        int maxOceanFloorY = Integer.MIN_VALUE;
+
+        int airColumns = 0;
+        int waterColumns = 0;
+        int solidColumns = 0;
+        int plantOrLeavesColumns = 0;
+
+        final Map<String, Integer> surfaceBlockCounts = new HashMap<>();
+
+        for (int localX = 0; localX < 16; localX++) {
+            for (int localZ = 0; localZ < 16; localZ++) {
+                final int worldX = chunk.getPos().getMinBlockX() + localX;
+                final int worldZ = chunk.getPos().getMinBlockZ() + localZ;
+
+                final int surfaceY = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, localX, localZ) - 1;
+                final int oceanFloorY = chunk.getHeight(Heightmap.Types.OCEAN_FLOOR, localX, localZ) - 1;
+
+                minSurfaceY = Math.min(minSurfaceY, surfaceY);
+                maxSurfaceY = Math.max(maxSurfaceY, surfaceY);
+                minOceanFloorY = Math.min(minOceanFloorY, oceanFloorY);
+                maxOceanFloorY = Math.max(maxOceanFloorY, oceanFloorY);
+
+                final int clampedSurfaceY = Math.max(
+                        serverLevel.getMinBuildHeight(),
+                        Math.min(surfaceY, serverLevel.getMaxBuildHeight() - 1)
+                );
+
+                final BlockPos surfacePos = new BlockPos(worldX, clampedSurfaceY, worldZ);
+                final BlockState surfaceState = chunk.getBlockState(surfacePos);
+                final ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(surfaceState.getBlock());
+
+                final String blockKey = blockId.toString();
+                surfaceBlockCounts.merge(blockKey, 1, Integer::sum);
+
+                if (surfaceState.isAir()) {
+                    airColumns++;
+                } else if (chunk.getFluidState(surfacePos).is(FluidTags.WATER)) {
+                    waterColumns++;
+                } else if (blockKey.contains("plant") || blockKey.contains("leaves")) {
+                    plantOrLeavesColumns++;
+                } else {
+                    solidColumns++;
+                }
+            }
+        }
+
+        final String dominantSurfaceBlock = surfaceBlockCounts.entrySet()
+                .stream()
+                .max(Map.Entry.comparingByValue())
+                .map(entry -> entry.getKey() + "=" + entry.getValue())
+                .orElse("none");
+
+        final String terrainClass = classifyChunk(waterColumns, solidColumns, airColumns, minSurfaceY, maxSurfaceY);
+
         AerofirmacraftTerrain.LOGGER.info(
-                "AFC terrain diagnostics: overworld chunk load. count={} chunkX={} chunkZ={} isNewChunk={} persistedStatus={} highestGeneratedStatus={} minY={} maxY={} chunkClass={}",
+                "AFC chunk summary: count={} chunkX={} chunkZ={} class={} surfaceY={}..{} oceanFloorY={}..{} solidColumns={} waterColumns={} airColumns={} plantOrLeavesColumns={} dominantSurface={} persistedStatus={} highestGeneratedStatus={}",
                 count,
                 chunk.getPos().x,
                 chunk.getPos().z,
-                isNewChunk,
+                terrainClass,
+                minSurfaceY,
+                maxSurfaceY,
+                minOceanFloorY,
+                maxOceanFloorY,
+                solidColumns,
+                waterColumns,
+                airColumns,
+                plantOrLeavesColumns,
+                dominantSurfaceBlock,
                 chunk.getPersistedStatus(),
-                chunk.getHighestGeneratedStatus(),
-                serverLevel.getMinBuildHeight(),
-                serverLevel.getMaxBuildHeight(),
-                chunk.getClass().getName()
+                chunk.getHighestGeneratedStatus()
         );
     }
 
-    private static void logSurfaceSample(final ServerLevel serverLevel, final ChunkAccess chunk, final boolean isNewChunk) {
-        final int count = SURFACE_SAMPLE_LOG_COUNT.incrementAndGet();
-
-        if (count > SURFACE_SAMPLE_LOG_LIMIT) {
-            if (count == SURFACE_SAMPLE_LOG_LIMIT + 1) {
-                AerofirmacraftTerrain.LOGGER.info(
-                        "AFC terrain sample: surface sample log limit reached. Further samples suppressed."
-                );
-            }
-            return;
+    private static String classifyChunk(
+            final int waterColumns,
+            final int solidColumns,
+            final int airColumns,
+            final int minSurfaceY,
+            final int maxSurfaceY
+    ) {
+        if (waterColumns >= 192) {
+            return "mostly_water";
         }
 
-        // Center-column sample for now. This is read-only and does not mutate terrain.
-        final int localX = 8;
-        final int localZ = 8;
+        if (waterColumns > 0 && solidColumns > 0) {
+            return "mixed_shore_or_river";
+        }
 
-        final int worldX = chunk.getPos().getMinBlockX() + localX;
-        final int worldZ = chunk.getPos().getMinBlockZ() + localZ;
+        if (solidColumns >= 192) {
+            if (maxSurfaceY - minSurfaceY >= 32) {
+                return "solid_land_high_relief";
+            }
 
-        final int surfaceY = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, localX, localZ) - 1;
-        final int oceanFloorY = chunk.getHeight(Heightmap.Types.OCEAN_FLOOR, localX, localZ) - 1;
+            return "solid_land";
+        }
 
-        final int clampedSurfaceY = Math.max(serverLevel.getMinBuildHeight(), Math.min(surfaceY, serverLevel.getMaxBuildHeight() - 1));
-        final BlockPos surfacePos = new BlockPos(worldX, clampedSurfaceY, worldZ);
+        if (airColumns >= 192) {
+            return "mostly_air";
+        }
 
-        final BlockState surfaceState = chunk.getBlockState(surfacePos);
-        final ResourceLocation surfaceBlockId = BuiltInRegistries.BLOCK.getKey(surfaceState.getBlock());
-
-        final boolean surfaceIsAir = surfaceState.isAir();
-        final boolean surfaceHasWaterFluid = chunk.getFluidState(surfacePos).is(FluidTags.WATER);
-
-        AerofirmacraftTerrain.LOGGER.info(
-                "AFC terrain sample: count={} chunkX={} chunkZ={} isNewChunk={} sampleX={} sampleZ={} surfaceY={} oceanFloorY={} surfaceBlock={} surfaceIsAir={} surfaceHasWaterFluid={}",
-                count,
-                chunk.getPos().x,
-                chunk.getPos().z,
-                isNewChunk,
-                worldX,
-                worldZ,
-                surfaceY,
-                oceanFloorY,
-                surfaceBlockId,
-                surfaceIsAir,
-                surfaceHasWaterFluid
-        );
+        return "mixed_unknown";
     }
 }

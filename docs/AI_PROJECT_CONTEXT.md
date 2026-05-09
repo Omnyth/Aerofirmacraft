@@ -85,3 +85,12 @@ Next diagnostic step:
 - record whether water fluid is present
 
 This is still diagnostics only. No terrain modification.
+
+## Chunk summary diagnostics
+
+Surface sampling confirmed land/highland samples around spawn.
+
+Next diagnostic step:
+- summarize all 256 columns per new overworld chunk
+- classify chunks as solid_land, solid_land_high_relief, mostly_water, mixed_shore_or_river, mostly_air, or mixed_unknown
+- continue read-only diagnostics only
