@@ -106,3 +106,26 @@ Classifier updated:
 
 Goal:
 Get reliable rough classes for open water, shore, coastal land, and normal land.
+
+## Chunk classifier verified
+
+Date: 2026-05-09
+
+The corrected chunk classifier was tested in a fresh CurseForge Aerofirmacraft world.
+
+Confirmed classes:
+- open_water_deep
+- shore_mixed
+- shore_edge
+- low_coastal_land
+- land
+
+Confirmed TFC fluid handling:
+- tfc:fluid/salt_water is now counted as fluid.
+- Open water chunks can show fluidColumns=256.
+- Shore chunks show mixed landColumns/fluidColumns.
+- Land chunks show landColumns near 256.
+
+Conclusion:
+The diagnostic classifier is useful enough to inform the first crude terrain transform prototype.
+ChunkEvent.Load sees chunks at minecraft:full status, so it is likely too late for clean worldgen-stage shaping, but it may be usable for a crude post-generation proof of concept.
