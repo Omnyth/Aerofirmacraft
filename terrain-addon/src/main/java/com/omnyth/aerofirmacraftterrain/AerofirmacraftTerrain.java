@@ -15,12 +15,12 @@ public final class AerofirmacraftTerrain {
     public AerofirmacraftTerrain(IEventBus modEventBus) {
         modEventBus.addListener(this::commonSetup);
 
-        NeoForge.EVENT_BUS.register(new TerrainDiagnostics());
+        NeoForge.EVENT_BUS.register(new TerrainCrudeTransformPrototype());
 
-        LOGGER.info("Aerofirmacraft Terrain constructed. Diagnostics are active; terrain changes are not active.");
+        LOGGER.info("Aerofirmacraft Terrain constructed. CRUDE POST-GENERATION TRANSFORM PROTOTYPE IS ACTIVE.");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        LOGGER.info("Aerofirmacraft Terrain common setup complete. Worldgen diagnostics only.");
+        LOGGER.info("Aerofirmacraft Terrain common setup complete. Crude post-generation transform prototype active.");
     }
 }

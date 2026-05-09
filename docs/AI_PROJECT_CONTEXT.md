@@ -129,3 +129,17 @@ Confirmed TFC fluid handling:
 Conclusion:
 The diagnostic classifier is useful enough to inform the first crude terrain transform prototype.
 ChunkEvent.Load sees chunks at minecraft:full status, so it is likely too late for clean worldgen-stage shaping, but it may be usable for a crude post-generation proof of concept.
+
+## Current branch: terrain-crude-postgen-transform
+
+Goal:
+Create first crude terrain-changing prototype.
+
+This branch:
+- transforms only newly generated overworld chunks
+- turns TFC ocean columns into sky above a bottom ocean layer
+- preserves land terrain above an underside height
+- carves air under landmasses
+- limits transformation to the first 24 chunks
+
+This is disposable proof-of-concept terrain logic, not final worldgen architecture.
