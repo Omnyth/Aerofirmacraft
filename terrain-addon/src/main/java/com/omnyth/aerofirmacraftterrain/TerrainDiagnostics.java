@@ -20,7 +20,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public final class TerrainDiagnostics {
-    private static final int CHUNK_SUMMARY_LOG_LIMIT = 40;
+    private static final int CHUNK_SUMMARY_LOG_LIMIT = 48;
     private static final AtomicInteger CHUNK_SUMMARY_LOG_COUNT = new AtomicInteger();
 
     @SubscribeEvent
@@ -80,10 +80,12 @@ public final class TerrainDiagnostics {
         int minOceanFloorY = Integer.MAX_VALUE;
         int maxOceanFloorY = Integer.MIN_VALUE;
 
+        int landColumns = 0;
+        int fluidColumns = 0;
         int airColumns = 0;
-        int waterColumns = 0;
-        int solidColumns = 0;
         int plantOrLeavesColumns = 0;
+        int rawRockColumns = 0;
+        int dirtOrMudColumns = 0;
 
         final Map<String, Integer> surfaceBlockCounts = new HashMap<>();
 
@@ -112,14 +114,37 @@ public final class TerrainDiagnostics {
                 final String blockKey = blockId.toString();
                 surfaceBlockCounts.merge(blockKey, 1, Integer::sum);
 
-                if (surfaceState.isAir()) {
+                final boolean isAir = surfaceState.isAir();
+                final boolean hasMinecraftWaterFluid = chunk.getFluidState(surfacePos).is(FluidTags.WATER);
+
+                // TFC salt water is represented by block IDs such as tfc:fluid/salt_water.
+                // Treat TFC fluid blocks as fluid columns even if the vanilla FluidTags.WATER test does not catch them.
+                final boolean isTfcFluidBlock = blockKey.startsWith("tfc:fluid/");
+                final boolean looksLikeWaterBlock = blockKey.contains("water");
+
+                final boolean isFluidColumn = hasMinecraftWaterFluid || isTfcFluidBlock || looksLikeWaterBlock;
+                final boolean isPlantOrLeaves = blockKey.contains("plant") || blockKey.contains("leaves");
+                final boolean isRawRock = blockKey.contains("rock/raw");
+                final boolean isDirtOrMud = blockKey.contains("dirt/") || blockKey.contains("mud/");
+
+                if (isAir) {
                     airColumns++;
-                } else if (chunk.getFluidState(surfacePos).is(FluidTags.WATER)) {
-                    waterColumns++;
-                } else if (blockKey.contains("plant") || blockKey.contains("leaves")) {
-                    plantOrLeavesColumns++;
+                } else if (isFluidColumn) {
+                    fluidColumns++;
                 } else {
-                    solidColumns++;
+                    landColumns++;
+
+                    if (isPlantOrLeaves) {
+                        plantOrLeavesColumns++;
+                    }
+
+                    if (isRawRock) {
+                        rawRockColumns++;
+                    }
+
+                    if (isDirtOrMud) {
+                        dirtOrMudColumns++;
+                    }
                 }
             }
         }
@@ -130,10 +155,18 @@ public final class TerrainDiagnostics {
                 .map(entry -> entry.getKey() + "=" + entry.getValue())
                 .orElse("none");
 
-        final String terrainClass = classifyChunk(waterColumns, solidColumns, airColumns, minSurfaceY, maxSurfaceY);
+        final String terrainClass = classifyChunk(
+                fluidColumns,
+                landColumns,
+                airColumns,
+                minSurfaceY,
+                maxSurfaceY,
+                minOceanFloorY,
+                maxOceanFloorY
+        );
 
         AerofirmacraftTerrain.LOGGER.info(
-                "AFC chunk summary: count={} chunkX={} chunkZ={} class={} surfaceY={}..{} oceanFloorY={}..{} solidColumns={} waterColumns={} airColumns={} plantOrLeavesColumns={} dominantSurface={} persistedStatus={} highestGeneratedStatus={}",
+                "AFC chunk summary: count={} chunkX={} chunkZ={} class={} surfaceY={}..{} oceanFloorY={}..{} landColumns={} fluidColumns={} airColumns={} plantOrLeavesColumns={} rawRockColumns={} dirtOrMudColumns={} dominantSurface={} persistedStatus={} highestGeneratedStatus={}",
                 count,
                 chunk.getPos().x,
                 chunk.getPos().z,
@@ -142,10 +175,12 @@ public final class TerrainDiagnostics {
                 maxSurfaceY,
                 minOceanFloorY,
                 maxOceanFloorY,
-                solidColumns,
-                waterColumns,
+                landColumns,
+                fluidColumns,
                 airColumns,
                 plantOrLeavesColumns,
+                rawRockColumns,
+                dirtOrMudColumns,
                 dominantSurfaceBlock,
                 chunk.getPersistedStatus(),
                 chunk.getHighestGeneratedStatus()
@@ -153,29 +188,46 @@ public final class TerrainDiagnostics {
     }
 
     private static String classifyChunk(
-            final int waterColumns,
-            final int solidColumns,
+            final int fluidColumns,
+            final int landColumns,
             final int airColumns,
             final int minSurfaceY,
-            final int maxSurfaceY
+            final int maxSurfaceY,
+            final int minOceanFloorY,
+            final int maxOceanFloorY
     ) {
-        if (waterColumns >= 192) {
-            return "mostly_water";
-        }
+        final int relief = maxSurfaceY - minSurfaceY;
+        final int waterDepthSignal = maxSurfaceY - minOceanFloorY;
 
-        if (waterColumns > 0 && solidColumns > 0) {
-            return "mixed_shore_or_river";
-        }
-
-        if (solidColumns >= 192) {
-            if (maxSurfaceY - minSurfaceY >= 32) {
-                return "solid_land_high_relief";
+        if (fluidColumns >= 224) {
+            if (waterDepthSignal >= 8) {
+                return "open_water_deep";
             }
 
-            return "solid_land";
+            return "open_water_shallow";
         }
 
-        if (airColumns >= 192) {
+        if (fluidColumns >= 96 && landColumns >= 96) {
+            return "shore_mixed";
+        }
+
+        if (fluidColumns > 0 && landColumns > 0) {
+            return "shore_edge";
+        }
+
+        if (landColumns >= 224) {
+            if (relief >= 32) {
+                return "land_high_relief";
+            }
+
+            if (minSurfaceY <= 63 && maxOceanFloorY <= 61) {
+                return "low_coastal_land";
+            }
+
+            return "land";
+        }
+
+        if (airColumns >= 224) {
             return "mostly_air";
         }
 

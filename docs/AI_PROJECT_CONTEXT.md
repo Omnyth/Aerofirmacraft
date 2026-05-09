@@ -94,3 +94,15 @@ Next diagnostic step:
 - summarize all 256 columns per new overworld chunk
 - classify chunks as solid_land, solid_land_high_relief, mostly_water, mixed_shore_or_river, mostly_air, or mixed_unknown
 - continue read-only diagnostics only
+
+## Chunk classifier correction
+
+The first 16x16 chunk summary pass showed TFC salt water surfaces as dominantSurface=tfc:fluid/salt_water, but those columns were being counted as solid.
+
+Classifier updated:
+- tfc:fluid/* is now treated as fluid
+- block IDs containing water are treated as fluid
+- plants/leaves are treated as land surface rather than separate non-land columns
+
+Goal:
+Get reliable rough classes for open water, shore, coastal land, and normal land.
