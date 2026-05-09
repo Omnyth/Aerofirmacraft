@@ -31,3 +31,18 @@ First goal:
 2. Confirm the addon compiles.
 3. Confirm the addon logs lifecycle events.
 4. Then investigate safe NeoForge/TFC worldgen hook points.
+## Verified scaffold load
+
+Date: 2026-05-09
+
+The terrain addon scaffold was tested in the CurseForge Aerofirmacraft instance.
+
+Confirmed log output:
+- Aerofirmacraft Terrain 0.1.0 appears in the loaded mod list.
+- Aerofirmacraft Terrain constructed successfully.
+- Common setup completed.
+- Server starting event detected minecraft:overworld.
+
+Current addon behavior:
+- No terrain changes.
+- Lifecycle logging only.
