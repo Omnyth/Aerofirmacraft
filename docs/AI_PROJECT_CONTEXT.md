@@ -176,3 +176,20 @@ Behavior:
 
 Success:
 World loads without stalling and latest.log contains AFC small carve: applied.
+
+## Current branch: terrain-tfc-noise-floating-patch-prototype
+
+Goal:
+Test a small version of the intended floating terrain transform inside TFCChunkGenerator.fillFromNoise completion.
+
+Behavior:
+- mutate one ProtoChunk only
+- center 8x8 columns only
+- land columns preserve top terrain and carve air underneath
+- fluid columns carve air above Y=0
+- glowstone marks land underside positions
+- do not use serverLevel.setBlock
+- do not use ChunkEvent.Load
+
+Success:
+World loads without stalling and latest.log contains AFC floating patch: applied.

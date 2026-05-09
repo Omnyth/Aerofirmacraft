@@ -3,7 +3,9 @@ package com.omnyth.aerofirmacraftterrain.mixin;
 import com.omnyth.aerofirmacraftterrain.AerofirmacraftTerrain;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.StructureManager;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
@@ -19,10 +21,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 @Mixin(targets = "net.dries007.tfc.world.TFCChunkGenerator", remap = false)
 public abstract class TFCChunkGeneratorMixin {
-    private static final AtomicBoolean AFC_DID_SMALL_CARVE = new AtomicBoolean(false);
+    private static final AtomicBoolean AFC_DID_FLOATING_PATCH = new AtomicBoolean(false);
+
+    private static final int GLOBAL_OCEAN_TOP_Y = 0;
+    private static final int LAND_MASS_THICKNESS = 14;
+    private static final int PATCH_MIN_LOCAL = 4;
+    private static final int PATCH_MAX_LOCAL = 11;
 
     @Inject(method = "fillFromNoise", at = @At("RETURN"))
-    private void afc$smallNoiseStageCarve(
+    private void afc$floatingPatchPrototype(
             final Blender blender,
             final RandomState randomState,
             final StructureManager structureManager,
@@ -33,7 +40,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (future == null) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC small carve: fillFromNoise returned null future for chunkX={} chunkZ={}",
+                    "AFC floating patch: fillFromNoise returned null future for chunkX={} chunkZ={}",
                     chunk.getPos().x,
                     chunk.getPos().z
             );
@@ -43,7 +50,7 @@ public abstract class TFCChunkGeneratorMixin {
         future.whenComplete((result, throwable) -> {
             if (throwable != null) {
                 AerofirmacraftTerrain.LOGGER.error(
-                        "AFC small carve: fillFromNoise future failed for chunkX={} chunkZ={}",
+                        "AFC floating patch: fillFromNoise future failed for chunkX={} chunkZ={}",
                         chunk.getPos().x,
                         chunk.getPos().z,
                         throwable
@@ -51,71 +58,134 @@ public abstract class TFCChunkGeneratorMixin {
                 return;
             }
 
-            if (!AFC_DID_SMALL_CARVE.compareAndSet(false, true)) {
+            if (!AFC_DID_FLOATING_PATCH.compareAndSet(false, true)) {
                 return;
             }
 
-            carveOneSmallShaft(result);
+            applyFloatingPatch(result);
         });
     }
 
-    private static void carveOneSmallShaft(final ChunkAccess chunk) {
+    private static void applyFloatingPatch(final ChunkAccess chunk) {
         final int minY = chunk.getHeightAccessorForGeneration().getMinBuildHeight();
         final int maxY = chunk.getHeightAccessorForGeneration().getMaxBuildHeight() - 1;
 
         final int centerWorldX = chunk.getPos().getBlockX(8);
         final int centerWorldZ = chunk.getPos().getBlockZ(8);
 
-        final int surfaceY = findTopNonAirY(chunk, centerWorldX, centerWorldZ, minY, maxY);
-        final int carveTopY = clamp(surfaceY + 3, minY + 8, maxY - 2);
-        final int floorY = clamp(surfaceY - 10, minY + 1, carveTopY - 1);
-
         final BlockState air = Blocks.AIR.defaultBlockState();
         final BlockState glowstone = Blocks.GLOWSTONE.defaultBlockState();
 
         final BlockPos.MutableBlockPos mutablePos = new BlockPos.MutableBlockPos();
 
+        int landColumns = 0;
+        int fluidColumns = 0;
         int airBlocks = 0;
         int markerBlocks = 0;
 
-        for (int localX = 6; localX <= 9; localX++) {
-            for (int localZ = 6; localZ <= 9; localZ++) {
+        int minSurfaceY = Integer.MAX_VALUE;
+        int maxSurfaceY = Integer.MIN_VALUE;
+        int minUndersideY = Integer.MAX_VALUE;
+        int maxUndersideY = Integer.MIN_VALUE;
+
+        String centerSurfaceBlockBefore = "unknown";
+        int centerSurfaceY = minY;
+        int centerUndersideY = minY;
+
+        for (int localX = PATCH_MIN_LOCAL; localX <= PATCH_MAX_LOCAL; localX++) {
+            for (int localZ = PATCH_MIN_LOCAL; localZ <= PATCH_MAX_LOCAL; localZ++) {
                 final int worldX = chunk.getPos().getBlockX(localX);
                 final int worldZ = chunk.getPos().getBlockZ(localZ);
 
-                mutablePos.set(worldX, floorY, worldZ);
-                chunk.setBlockState(mutablePos, glowstone, false);
-                markerBlocks++;
+                final int surfaceY = findTopNonAirY(chunk, worldX, worldZ, minY, maxY);
 
-                for (int y = floorY + 1; y <= carveTopY; y++) {
-                    mutablePos.set(worldX, y, worldZ);
-                    chunk.setBlockState(mutablePos, air, false);
-                    airBlocks++;
+                mutablePos.set(worldX, surfaceY, worldZ);
+                final BlockState surfaceState = chunk.getBlockState(mutablePos);
+                final String surfaceBlockId = BuiltInRegistries.BLOCK.getKey(surfaceState.getBlock()).toString();
+
+                final boolean fluidColumn = isFluidSurface(surfaceBlockId);
+
+                minSurfaceY = Math.min(minSurfaceY, surfaceY);
+                maxSurfaceY = Math.max(maxSurfaceY, surfaceY);
+
+                if (localX == 8 && localZ == 8) {
+                    centerSurfaceBlockBefore = surfaceBlockId;
+                    centerSurfaceY = surfaceY;
+                }
+
+                if (fluidColumn) {
+                    fluidColumns++;
+
+                    final int carveTopY = clamp(surfaceY + 6, GLOBAL_OCEAN_TOP_Y + 1, maxY);
+
+                    for (int y = GLOBAL_OCEAN_TOP_Y + 1; y <= carveTopY; y++) {
+                        mutablePos.set(worldX, y, worldZ);
+
+                        if (!chunk.getBlockState(mutablePos).isAir()) {
+                            chunk.setBlockState(mutablePos, air, false);
+                            airBlocks++;
+                        }
+                    }
+                } else {
+                    landColumns++;
+
+                    final int undersideY = clamp(surfaceY - LAND_MASS_THICKNESS, GLOBAL_OCEAN_TOP_Y + 8, maxY - 1);
+                    final int carveTopY = undersideY - 1;
+
+                    minUndersideY = Math.min(minUndersideY, undersideY);
+                    maxUndersideY = Math.max(maxUndersideY, undersideY);
+
+                    if (localX == 8 && localZ == 8) {
+                        centerUndersideY = undersideY;
+                    }
+
+                    mutablePos.set(worldX, undersideY, worldZ);
+                    chunk.setBlockState(mutablePos, glowstone, false);
+                    markerBlocks++;
+
+                    for (int y = GLOBAL_OCEAN_TOP_Y + 1; y <= carveTopY; y++) {
+                        mutablePos.set(worldX, y, worldZ);
+
+                        if (!chunk.getBlockState(mutablePos).isAir()) {
+                            chunk.setBlockState(mutablePos, air, false);
+                            airBlocks++;
+                        }
+                    }
                 }
             }
         }
 
+        if (minUndersideY == Integer.MAX_VALUE) {
+            minUndersideY = -9999;
+            maxUndersideY = -9999;
+        }
+
         chunk.setUnsaved(true);
 
-        final BlockState originalCenterState = chunk.getBlockState(new BlockPos(centerWorldX, surfaceY, centerWorldZ));
-        final String originalCenterBlock = BuiltInRegistries.BLOCK.getKey(originalCenterState.getBlock()).toString();
-
         AerofirmacraftTerrain.LOGGER.info(
-                "AFC small carve: applied chunkX={} chunkZ={} centerX={} centerZ={} surfaceY={} floorY={} carveTopY={} airBlocks={} markerBlocks={} centerBlock={} chunkStatus={} chunkClass={} tpHint='/tp @s {} {} {}'",
+                "AFC floating patch: applied chunkX={} chunkZ={} centerX={} centerZ={} landColumns={} fluidColumns={} airBlocks={} markerBlocks={} surfaceY={}..{} undersideY={}..{} centerSurfaceY={} centerUndersideY={} centerSurfaceBlockBefore={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
                 chunk.getPos().x,
                 chunk.getPos().z,
                 centerWorldX,
                 centerWorldZ,
-                surfaceY,
-                floorY,
-                carveTopY,
+                landColumns,
+                fluidColumns,
                 airBlocks,
                 markerBlocks,
-                originalCenterBlock,
+                minSurfaceY,
+                maxSurfaceY,
+                minUndersideY,
+                maxUndersideY,
+                centerSurfaceY,
+                centerUndersideY,
+                centerSurfaceBlockBefore,
                 chunk.getPersistedStatus(),
                 chunk.getClass().getName(),
                 centerWorldX,
-                carveTopY + 3,
+                centerSurfaceY + 10,
+                centerWorldZ,
+                centerWorldX,
+                Math.max(GLOBAL_OCEAN_TOP_Y + 4, centerUndersideY - 6),
                 centerWorldZ
         );
     }
@@ -138,6 +208,11 @@ public abstract class TFCChunkGeneratorMixin {
         }
 
         return minY;
+    }
+
+    private static boolean isFluidSurface(final String surfaceBlockId) {
+        return surfaceBlockId.startsWith("tfc:fluid/")
+                || surfaceBlockId.contains("water");
     }
 
     private static int clamp(final int value, final int min, final int max) {
