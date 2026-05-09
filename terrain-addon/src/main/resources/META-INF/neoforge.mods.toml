@@ -2,21 +2,22 @@ modLoader="javafml"
 loaderVersion="${loader_version_range}"
 license="${mod_license}"
 
+[[mixins]]
+config="aerofirmacraft_terrain.mixins.json"
+
 [[mods]]
 modId="${mod_id}"
 version="${mod_version}"
 displayName="${mod_name}"
 authors="Omnyth"
 description='''
-Terrain prototype addon for Aerofirmacraft.
+Terrain addon for Aerofirmacraft.
 
-Initial milestone:
-- load beside the pack
-- log startup lifecycle events
-- make no worldgen changes yet
+Current branch:
+TFC fillFromNoise mixin canary.
 
-Long-term goal:
-Preserve normal TFC regions horizontally while transforming landmasses into floating terrain above a global ocean floor.
+This branch logs when TFCChunkGenerator.fillFromNoise runs.
+It does not modify terrain.
 '''
 
 [[dependencies.${mod_id}]]
@@ -31,4 +32,11 @@ modId="minecraft"
 type="required"
 versionRange="${minecraft_version_range}"
 ordering="NONE"
+side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="tfc"
+type="required"
+versionRange="[0,)"
+ordering="AFTER"
 side="BOTH"

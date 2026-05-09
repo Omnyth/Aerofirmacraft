@@ -129,3 +129,19 @@ Confirmed TFC fluid handling:
 Conclusion:
 The diagnostic classifier is useful enough to inform the first crude terrain transform prototype.
 ChunkEvent.Load sees chunks at minecraft:full status, so it is likely too late for clean worldgen-stage shaping, but it may be usable for a crude post-generation proof of concept.
+
+## Current branch: terrain-tfc-fillfromnoise-mixin-canary
+
+Goal:
+Prove we can hook TFCChunkGenerator.fillFromNoise before full chunk load.
+
+Reason:
+The post-generation transform from ChunkEvent.Load caused load stalls because chunks were already full LevelChunks.
+
+New target:
+Mixin into net.dries007.tfc.world.TFCChunkGenerator#fillFromNoise.
+
+Current behavior:
+- log at HEAD
+- log when returned CompletableFuture completes
+- no terrain mutation
