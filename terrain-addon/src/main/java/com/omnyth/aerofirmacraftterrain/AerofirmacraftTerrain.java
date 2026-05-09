@@ -14,10 +14,10 @@ public final class AerofirmacraftTerrain {
     public AerofirmacraftTerrain(IEventBus modEventBus) {
         modEventBus.addListener(this::commonSetup);
 
-        LOGGER.info("Aerofirmacraft Terrain constructed. TFC noise-stage floating patch prototype active.");
+        LOGGER.info("Aerofirmacraft Terrain constructed. TFC noise-stage land patch prototype active.");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        LOGGER.info("Aerofirmacraft Terrain common setup complete. One-chunk 8x8 floating patch only.");
+        LOGGER.info("Aerofirmacraft Terrain common setup complete. One land-focused 8x8 floating patch only.");
     }
 }
