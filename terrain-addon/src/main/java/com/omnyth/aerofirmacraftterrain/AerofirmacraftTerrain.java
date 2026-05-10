@@ -14,10 +14,10 @@ public final class AerofirmacraftTerrain {
     public AerofirmacraftTerrain(IEventBus modEventBus) {
         modEventBus.addListener(this::commonSetup);
 
-        LOGGER.info("Aerofirmacraft Terrain constructed. 3x3 region transform v2 active.");
+        LOGGER.info("Aerofirmacraft Terrain constructed. 5x5 region transform prototype active.");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        LOGGER.info("Aerofirmacraft Terrain common setup complete. 3x3 ProtoChunk region transform v2 only.");
+        LOGGER.info("Aerofirmacraft Terrain common setup complete. 5x5 ProtoChunk region transform only.");
     }
 }

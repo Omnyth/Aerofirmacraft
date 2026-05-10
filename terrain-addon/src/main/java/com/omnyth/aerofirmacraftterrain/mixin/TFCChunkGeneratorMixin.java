@@ -13,6 +13,9 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -21,7 +24,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Mixin(targets = "net.dries007.tfc.world.TFCChunkGenerator", remap = false)
 public abstract class TFCChunkGeneratorMixin {
     private static final Object AFC_TARGET_LOCK = new Object();
+
     private static final Set<Long> AFC_TRANSFORMED_CHUNKS = ConcurrentHashMap.newKeySet();
+    private static final List<PendingChunk> AFC_PENDING_CHUNKS = new ArrayList<>();
 
     private static final AtomicInteger AFC_TRANSFORM_COUNT = new AtomicInteger();
     private static final AtomicInteger AFC_SKIP_COUNT = new AtomicInteger();
@@ -36,12 +41,13 @@ public abstract class TFCChunkGeneratorMixin {
     private static final int BASE_LAND_MASS_THICKNESS = 44;
     private static final int THICKNESS_VARIATION = 10;
 
-    private static final int REGION_RADIUS_CHUNKS = 1;
-    private static final int MAX_TRANSFORMED_CHUNKS = 9;
-    private static final int SKIP_LOG_LIMIT = 24;
+    private static final int REGION_RADIUS_CHUNKS = 2;
+    private static final int MAX_TRANSFORMED_CHUNKS = 25;
+    private static final int SKIP_LOG_LIMIT = 32;
+    private static final int PENDING_CHUNK_LIMIT = 96;
 
     @Inject(method = "fillFromNoise", at = @At("RETURN"))
-    private void afc$regionTransformV2(
+    private void afc$regionTransform5x5(
             final Blender blender,
             final RandomState randomState,
             final StructureManager structureManager,
@@ -52,7 +58,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (future == null) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC region v2: fillFromNoise returned null future for chunkX={} chunkZ={}",
+                    "AFC region 5x5: fillFromNoise returned null future for chunkX={} chunkZ={}",
                     chunk.getPos().x,
                     chunk.getPos().z
             );
@@ -62,7 +68,7 @@ public abstract class TFCChunkGeneratorMixin {
         future.whenComplete((result, throwable) -> {
             if (throwable != null) {
                 AerofirmacraftTerrain.LOGGER.error(
-                        "AFC region v2: fillFromNoise future failed for chunkX={} chunkZ={}",
+                        "AFC region 5x5: fillFromNoise future failed for chunkX={} chunkZ={}",
                         chunk.getPos().x,
                         chunk.getPos().z,
                         throwable
@@ -76,22 +82,23 @@ public abstract class TFCChunkGeneratorMixin {
             final int centerWorldZ = result.getPos().getBlockZ(8);
             final int centerSurfaceY = findTopNonAirY(result, centerWorldX, centerWorldZ, minY, maxY);
 
-            final int claimIndex = claimChunkForRegion(result, centerSurfaceY);
+            final List<TransformJob> jobs = claimChunkAndMaybeReplayPending(result, centerSurfaceY);
 
-            if (claimIndex <= 0) {
-                return;
+            for (TransformJob job : jobs) {
+                applyFullChunkTransform(job.chunk(), job.centerSurfaceY(), job.index());
             }
-
-            applyFullChunkTransform(result, centerSurfaceY, claimIndex);
         });
     }
 
-    private static int claimChunkForRegion(final ChunkAccess chunk, final int centerSurfaceY) {
+    private static List<TransformJob> claimChunkAndMaybeReplayPending(final ChunkAccess chunk, final int centerSurfaceY) {
+        final List<TransformJob> jobs = new ArrayList<>();
+
         synchronized (AFC_TARGET_LOCK) {
             if (!afc$targetSelected) {
                 if (centerSurfaceY < LAND_TRIGGER_SURFACE_Y) {
+                    rememberPending(chunk, centerSurfaceY);
                     logSkip(chunk, centerSurfaceY, "awaiting_land_target");
-                    return -1;
+                    return jobs;
                 }
 
                 afc$targetSelected = true;
@@ -99,32 +106,68 @@ public abstract class TFCChunkGeneratorMixin {
                 afc$targetChunkZ = chunk.getPos().z;
 
                 AerofirmacraftTerrain.LOGGER.info(
-                        "AFC region v2: selected target center chunkX={} chunkZ={} centerSurfaceY={}",
+                        "AFC region 5x5: selected target center chunkX={} chunkZ={} centerSurfaceY={}",
                         afc$targetChunkX,
                         afc$targetChunkZ,
                         centerSurfaceY
                 );
+
+                replayPendingChunksInto(jobs);
             }
 
-            final int dx = Math.abs(chunk.getPos().x - afc$targetChunkX);
-            final int dz = Math.abs(chunk.getPos().z - afc$targetChunkZ);
+            claimCurrentChunkInto(chunk, centerSurfaceY, jobs);
+        }
 
-            if (dx > REGION_RADIUS_CHUNKS || dz > REGION_RADIUS_CHUNKS) {
-                logSkip(chunk, centerSurfaceY, "outside_target_3x3");
-                return -1;
-            }
+        return jobs;
+    }
+
+    private static void rememberPending(final ChunkAccess chunk, final int centerSurfaceY) {
+        if (AFC_PENDING_CHUNKS.size() >= PENDING_CHUNK_LIMIT) {
+            return;
+        }
+
+        AFC_PENDING_CHUNKS.add(new PendingChunk(chunk, centerSurfaceY));
+    }
+
+    private static void replayPendingChunksInto(final List<TransformJob> jobs) {
+        final Iterator<PendingChunk> iterator = AFC_PENDING_CHUNKS.iterator();
+
+        while (iterator.hasNext()) {
+            final PendingChunk pending = iterator.next();
+            iterator.remove();
+
+            claimCurrentChunkInto(pending.chunk(), pending.centerSurfaceY(), jobs);
 
             if (AFC_TRANSFORMED_CHUNKS.size() >= MAX_TRANSFORMED_CHUNKS) {
-                logSkip(chunk, centerSurfaceY, "transform_limit_reached");
-                return -1;
+                return;
             }
-
-            if (!AFC_TRANSFORMED_CHUNKS.add(chunk.getPos().toLong())) {
-                return -1;
-            }
-
-            return AFC_TRANSFORM_COUNT.incrementAndGet();
         }
+    }
+
+    private static void claimCurrentChunkInto(
+            final ChunkAccess chunk,
+            final int centerSurfaceY,
+            final List<TransformJob> jobs
+    ) {
+        if (AFC_TRANSFORMED_CHUNKS.size() >= MAX_TRANSFORMED_CHUNKS) {
+            logSkip(chunk, centerSurfaceY, "transform_limit_reached");
+            return;
+        }
+
+        final int dx = Math.abs(chunk.getPos().x - afc$targetChunkX);
+        final int dz = Math.abs(chunk.getPos().z - afc$targetChunkZ);
+
+        if (dx > REGION_RADIUS_CHUNKS || dz > REGION_RADIUS_CHUNKS) {
+            logSkip(chunk, centerSurfaceY, "outside_target_5x5");
+            return;
+        }
+
+        if (!AFC_TRANSFORMED_CHUNKS.add(chunk.getPos().toLong())) {
+            return;
+        }
+
+        final int index = AFC_TRANSFORM_COUNT.incrementAndGet();
+        jobs.add(new TransformJob(chunk, centerSurfaceY, index));
     }
 
     private static void applyFullChunkTransform(final ChunkAccess chunk, final int centerSurfaceY, final int transformIndex) {
@@ -148,7 +191,7 @@ public abstract class TFCChunkGeneratorMixin {
         int maxSurfaceY = Integer.MIN_VALUE;
         int minUndersideY = Integer.MAX_VALUE;
         int maxUndersideY = Integer.MIN_VALUE;
-        int centerUndersideY = minY;
+        int centerUndersideY = Integer.MIN_VALUE;
 
         for (int localX = 0; localX < 16; localX++) {
             for (int localZ = 0; localZ < 16; localZ++) {
@@ -210,10 +253,14 @@ public abstract class TFCChunkGeneratorMixin {
             maxUndersideY = -9999;
         }
 
+        if (centerUndersideY == Integer.MIN_VALUE) {
+            centerUndersideY = minUndersideY;
+        }
+
         chunk.setUnsaved(true);
 
         AerofirmacraftTerrain.LOGGER.info(
-                "AFC region v2: applied index={} chunkX={} chunkZ={} targetChunkX={} targetChunkZ={} centerX={} centerZ={} landLikeColumns={} lowColumns={} airBlocks={} markerBlocks={} surfaceY={}..{} undersideY={}..{} centerSurfaceY={} centerUndersideY={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
+                "AFC region 5x5: applied index={} chunkX={} chunkZ={} targetChunkX={} targetChunkZ={} centerX={} centerZ={} landLikeColumns={} lowColumns={} airBlocks={} markerBlocks={} surfaceY={}..{} undersideY={}..{} centerSurfaceY={} centerUndersideY={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
                 transformIndex,
                 chunk.getPos().x,
                 chunk.getPos().z,
@@ -247,7 +294,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (skip <= SKIP_LOG_LIMIT) {
             AerofirmacraftTerrain.LOGGER.info(
-                    "AFC region v2: skipped chunkX={} chunkZ={} centerSurfaceY={} reason={}",
+                    "AFC region 5x5: skipped chunkX={} chunkZ={} centerSurfaceY={} reason={}",
                     chunk.getPos().x,
                     chunk.getPos().z,
                     centerSurfaceY,
@@ -255,7 +302,7 @@ public abstract class TFCChunkGeneratorMixin {
             );
         } else if (skip == SKIP_LOG_LIMIT + 1) {
             AerofirmacraftTerrain.LOGGER.info(
-                    "AFC region v2: skip log limit reached. Further skip logs suppressed."
+                    "AFC region 5x5: skip log limit reached. Further skip logs suppressed."
             );
         }
     }
@@ -295,5 +342,11 @@ public abstract class TFCChunkGeneratorMixin {
 
     private static int clamp(final int value, final int min, final int max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    private record PendingChunk(ChunkAccess chunk, int centerSurfaceY) {
+    }
+
+    private record TransformJob(ChunkAccess chunk, int centerSurfaceY, int index) {
     }
 }

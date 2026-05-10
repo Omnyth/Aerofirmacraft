@@ -246,3 +246,16 @@ Changes:
 - low/shore chunks inside the selected target region are no longer skipped just because their center surface is low
 - transform numbering is fixed with AtomicInteger
 - skip log spam is reduced
+
+## Current branch: terrain-tfc-noise-5x5-region-transform
+
+Goal:
+Scale from 3x3 v2 to 5x5 while carrying forward fixes.
+
+Changes:
+- 5x5 target region
+- max 25 transformed chunks
+- pending skipped chunks can be replayed after target selection
+- centerUndersideY fallback fixed for low-center chunks
+- still avoids registry/block-ID lookups
+- still only mutates ProtoChunks at minecraft:noise
