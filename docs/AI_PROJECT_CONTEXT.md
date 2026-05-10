@@ -193,3 +193,18 @@ Behavior:
 
 Success:
 World loads without stalling and latest.log contains AFC floating patch: applied.
+
+## Current branch: terrain-tfc-noise-land-center-prototype
+
+Goal:
+Replace the crashing land-patch prototype with a minimal land-center variant.
+
+Reason:
+terrain-tfc-noise-land-patch-prototype crashed during mod loading with TFC salt_water unbound value, even in a stripped-down TFC-focused pack.
+
+Behavior:
+- start from known-good floating patch branch
+- skip fluid-center chunks
+- transform first chunk with land-like center surface
+- mutate one ProtoChunk only
+- use ChunkAccess#setBlockState only
