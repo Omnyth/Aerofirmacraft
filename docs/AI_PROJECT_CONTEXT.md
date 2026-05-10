@@ -484,3 +484,17 @@ Changes:
 - assign lower Y biome cells to aerofirmacraft_terrain:lower_ocean
 - no manual water/stone/bedrock fill
 - no sky-gap/island carving
+
+## Current branch: terrain-tfc-real-lower-ocean-biome-v21-noise-settings
+
+Goal:
+Test whether extending overworld noise_settings min_y to -128 lets TFC generate the lower band using the real lower_ocean BiomeExtension.
+
+Changes:
+- base from V20c
+- keep aerofirmacraft_terrain:lower_ocean BiomeExtension
+- keep lower Y biome assignment
+- add data/minecraft/worldgen/noise_settings/overworld.json override
+- set noise_settings min_y=-128 while preserving top Y
+- no manual water/stone/bedrock fill
+- no sky-gap/island carving
