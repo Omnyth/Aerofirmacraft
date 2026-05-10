@@ -193,3 +193,18 @@ Behavior:
 
 Success:
 World loads without stalling and latest.log contains AFC floating patch: applied.
+
+## Current branch: terrain-tfc-noise-height-gated-land-patch
+
+Goal:
+Avoid the TFC salt_water registry crash while testing a land-bearing patch.
+
+Reason:
+The previous land-patch and land-center prototypes crashed during mod loading with tfc:salt_water unbound value.
+
+Behavior:
+- start from known-good floating patch branch
+- no BuiltInRegistries/block ID inspection
+- skip chunks until center surface height >= 66
+- mutate one ProtoChunk only
+- use ChunkAccess#setBlockState only

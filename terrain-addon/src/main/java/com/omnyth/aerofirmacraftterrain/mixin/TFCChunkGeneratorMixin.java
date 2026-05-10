@@ -2,10 +2,7 @@ package com.omnyth.aerofirmacraftterrain.mixin;
 
 import com.omnyth.aerofirmacraftterrain.AerofirmacraftTerrain;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.StructureManager;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
@@ -18,18 +15,22 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Mixin(targets = "net.dries007.tfc.world.TFCChunkGenerator", remap = false)
 public abstract class TFCChunkGeneratorMixin {
-    private static final AtomicBoolean AFC_DID_FLOATING_PATCH = new AtomicBoolean(false);
+    private static final AtomicBoolean AFC_DID_PATCH = new AtomicBoolean(false);
+    private static final AtomicInteger AFC_SKIP_COUNT = new AtomicInteger();
 
     private static final int GLOBAL_OCEAN_TOP_Y = 0;
+    private static final int LAND_TRIGGER_SURFACE_Y = 66;
     private static final int LAND_MASS_THICKNESS = 14;
     private static final int PATCH_MIN_LOCAL = 4;
     private static final int PATCH_MAX_LOCAL = 11;
+    private static final int SKIP_LOG_LIMIT = 32;
 
     @Inject(method = "fillFromNoise", at = @At("RETURN"))
-    private void afc$floatingPatchPrototype(
+    private void afc$heightGatedLandPatch(
             final Blender blender,
             final RandomState randomState,
             final StructureManager structureManager,
@@ -40,7 +41,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (future == null) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC floating patch: fillFromNoise returned null future for chunkX={} chunkZ={}",
+                    "AFC height patch: fillFromNoise returned null future for chunkX={} chunkZ={}",
                     chunk.getPos().x,
                     chunk.getPos().z
             );
@@ -50,7 +51,7 @@ public abstract class TFCChunkGeneratorMixin {
         future.whenComplete((result, throwable) -> {
             if (throwable != null) {
                 AerofirmacraftTerrain.LOGGER.error(
-                        "AFC floating patch: fillFromNoise future failed for chunkX={} chunkZ={}",
+                        "AFC height patch: fillFromNoise future failed for chunkX={} chunkZ={}",
                         chunk.getPos().x,
                         chunk.getPos().z,
                         throwable
@@ -58,15 +59,45 @@ public abstract class TFCChunkGeneratorMixin {
                 return;
             }
 
-            if (!AFC_DID_FLOATING_PATCH.compareAndSet(false, true)) {
+            if (AFC_DID_PATCH.get()) {
                 return;
             }
 
-            applyFloatingPatch(result);
+            final int minY = result.getHeightAccessorForGeneration().getMinBuildHeight();
+            final int maxY = result.getHeightAccessorForGeneration().getMaxBuildHeight() - 1;
+            final int centerWorldX = result.getPos().getBlockX(8);
+            final int centerWorldZ = result.getPos().getBlockZ(8);
+            final int centerSurfaceY = findTopNonAirY(result, centerWorldX, centerWorldZ, minY, maxY);
+
+            if (centerSurfaceY < LAND_TRIGGER_SURFACE_Y) {
+                final int skip = AFC_SKIP_COUNT.incrementAndGet();
+
+                if (skip <= SKIP_LOG_LIMIT) {
+                    AerofirmacraftTerrain.LOGGER.info(
+                            "AFC height patch: skipped chunkX={} chunkZ={} centerSurfaceY={} requiredSurfaceY={}",
+                            result.getPos().x,
+                            result.getPos().z,
+                            centerSurfaceY,
+                            LAND_TRIGGER_SURFACE_Y
+                    );
+                } else if (skip == SKIP_LOG_LIMIT + 1) {
+                    AerofirmacraftTerrain.LOGGER.info(
+                            "AFC height patch: skip log limit reached. Further skip logs suppressed."
+                    );
+                }
+
+                return;
+            }
+
+            if (!AFC_DID_PATCH.compareAndSet(false, true)) {
+                return;
+            }
+
+            applyPatch(result, centerSurfaceY);
         });
     }
 
-    private static void applyFloatingPatch(final ChunkAccess chunk) {
+    private static void applyPatch(final ChunkAccess chunk, final int centerSurfaceY) {
         final int minY = chunk.getHeightAccessorForGeneration().getMinBuildHeight();
         final int maxY = chunk.getHeightAccessorForGeneration().getMaxBuildHeight() - 1;
 
@@ -78,8 +109,8 @@ public abstract class TFCChunkGeneratorMixin {
 
         final BlockPos.MutableBlockPos mutablePos = new BlockPos.MutableBlockPos();
 
-        int landColumns = 0;
-        int fluidColumns = 0;
+        int highColumns = 0;
+        int lowColumns = 0;
         int airBlocks = 0;
         int markerBlocks = 0;
 
@@ -87,9 +118,6 @@ public abstract class TFCChunkGeneratorMixin {
         int maxSurfaceY = Integer.MIN_VALUE;
         int minUndersideY = Integer.MAX_VALUE;
         int maxUndersideY = Integer.MIN_VALUE;
-
-        String centerSurfaceBlockBefore = "unknown";
-        int centerSurfaceY = minY;
         int centerUndersideY = minY;
 
         for (int localX = PATCH_MIN_LOCAL; localX <= PATCH_MAX_LOCAL; localX++) {
@@ -99,22 +127,11 @@ public abstract class TFCChunkGeneratorMixin {
 
                 final int surfaceY = findTopNonAirY(chunk, worldX, worldZ, minY, maxY);
 
-                mutablePos.set(worldX, surfaceY, worldZ);
-                final BlockState surfaceState = chunk.getBlockState(mutablePos);
-                final String surfaceBlockId = BuiltInRegistries.BLOCK.getKey(surfaceState.getBlock()).toString();
-
-                final boolean fluidColumn = isFluidSurface(surfaceBlockId);
-
                 minSurfaceY = Math.min(minSurfaceY, surfaceY);
                 maxSurfaceY = Math.max(maxSurfaceY, surfaceY);
 
-                if (localX == 8 && localZ == 8) {
-                    centerSurfaceBlockBefore = surfaceBlockId;
-                    centerSurfaceY = surfaceY;
-                }
-
-                if (fluidColumn) {
-                    fluidColumns++;
+                if (surfaceY < LAND_TRIGGER_SURFACE_Y) {
+                    lowColumns++;
 
                     final int carveTopY = clamp(surfaceY + 6, GLOBAL_OCEAN_TOP_Y + 1, maxY);
 
@@ -127,7 +144,7 @@ public abstract class TFCChunkGeneratorMixin {
                         }
                     }
                 } else {
-                    landColumns++;
+                    highColumns++;
 
                     final int undersideY = clamp(surfaceY - LAND_MASS_THICKNESS, GLOBAL_OCEAN_TOP_Y + 8, maxY - 1);
                     final int carveTopY = undersideY - 1;
@@ -163,13 +180,13 @@ public abstract class TFCChunkGeneratorMixin {
         chunk.setUnsaved(true);
 
         AerofirmacraftTerrain.LOGGER.info(
-                "AFC floating patch: applied chunkX={} chunkZ={} centerX={} centerZ={} landColumns={} fluidColumns={} airBlocks={} markerBlocks={} surfaceY={}..{} undersideY={}..{} centerSurfaceY={} centerUndersideY={} centerSurfaceBlockBefore={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
+                "AFC height patch: applied chunkX={} chunkZ={} centerX={} centerZ={} highColumns={} lowColumns={} airBlocks={} markerBlocks={} surfaceY={}..{} undersideY={}..{} centerSurfaceY={} centerUndersideY={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
                 chunk.getPos().x,
                 chunk.getPos().z,
                 centerWorldX,
                 centerWorldZ,
-                landColumns,
-                fluidColumns,
+                highColumns,
+                lowColumns,
                 airBlocks,
                 markerBlocks,
                 minSurfaceY,
@@ -178,11 +195,10 @@ public abstract class TFCChunkGeneratorMixin {
                 maxUndersideY,
                 centerSurfaceY,
                 centerUndersideY,
-                centerSurfaceBlockBefore,
                 chunk.getPersistedStatus(),
                 chunk.getClass().getName(),
                 centerWorldX,
-                centerSurfaceY + 10,
+                centerSurfaceY + 12,
                 centerWorldZ,
                 centerWorldX,
                 Math.max(GLOBAL_OCEAN_TOP_Y + 4, centerUndersideY - 6),
@@ -208,11 +224,6 @@ public abstract class TFCChunkGeneratorMixin {
         }
 
         return minY;
-    }
-
-    private static boolean isFluidSurface(final String surfaceBlockId) {
-        return surfaceBlockId.startsWith("tfc:fluid/")
-                || surfaceBlockId.contains("water");
     }
 
     private static int clamp(final int value, final int min, final int max) {
