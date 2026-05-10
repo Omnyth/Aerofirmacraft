@@ -421,3 +421,17 @@ Changes:
 - assign tfc:ocean to biome cells from minY through the Y=0 cell
 - keep sky_gap assignment above Y=0 for carved old-ocean/coastal gaps
 - keep original TFC biomes above Y=0 for preserved islands/rivers/lakes
+
+## Current branch: terrain-tfc-extend-min-y-lower-ocean-v14
+
+Goal:
+Extend overworld min_y to -128 and move AFC lower ocean into the new vertical band below old TFC minY.
+
+Changes:
+- add data/minecraft/dimension_type/overworld.json override copied from installed Minecraft jar
+- set min_y to -128 and preserve original top Y
+- fill only new lower band below old TFC floor with bedrock/crust/water
+- assign tfc:ocean to lower band biome cells
+- keep sky_gap above lower ocean for old ocean/coastal biomes
+- preserve original TFC biomes above lower ocean for land/rivers/lakes
+- fresh-world only test

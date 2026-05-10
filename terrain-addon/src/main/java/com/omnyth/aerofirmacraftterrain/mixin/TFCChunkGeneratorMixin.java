@@ -41,12 +41,15 @@ public abstract class TFCChunkGeneratorMixin {
             ResourceLocation.fromNamespaceAndPath("tfc", "ocean")
     );
 
-    private static final int GLOBAL_OCEAN_TOP_Y = 0;
+    // Old TFC floor. V14 assumes the dimension is extended downward to -128,
+    // while TFC terrain generation still primarily owns Y=-64 and upward.
+    private static final int OLD_TFC_MIN_Y = -64;
+    private static final int LOWER_OCEAN_TOP_Y = -65;
+
+    private static final int OCEAN_CRUST_THICKNESS = 8;
 
     private static final int BASE_LAND_MASS_THICKNESS = 44;
     private static final int THICKNESS_VARIATION = 10;
-
-    private static final int OCEAN_CRUST_THICKNESS = 8;
 
     private static final int SKY_GAP_NONE = 0;
     private static final int SKY_GAP_DEFINITE_OCEAN = 1;
@@ -68,7 +71,7 @@ public abstract class TFCChunkGeneratorMixin {
     private static final AtomicLong AFC_TOTAL_TFC_OCEAN_BIOME_CELLS = new AtomicLong();
 
     @Inject(method = "fillFromNoise", at = @At("RETURN"), cancellable = true)
-    private void afc$tfcOceanBiomeV9(
+    private void afc$extendedMinYLowerOceanV14(
             final Blender blender,
             final RandomState randomState,
             final StructureManager structureManager,
@@ -79,7 +82,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (originalFuture == null) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC lower-ocean v10: fillFromNoise returned null future for chunkX={} chunkZ={}",
+                    "AFC min-y v14: fillFromNoise returned null future for chunkX={} chunkZ={}",
                     chunk.getPos().x,
                     chunk.getPos().z
             );
@@ -92,10 +95,10 @@ public abstract class TFCChunkGeneratorMixin {
                 final Holder<Biome> skyGapBiome = biomeRegistry.getHolderOrThrow(SKY_GAP_BIOME_KEY);
                 final Holder<Biome> tfcOceanBiome = biomeRegistry.getHolderOrThrow(TFC_OCEAN_BIOME_KEY);
 
-                applyContinuousTransformLocked(result, skyGapBiome, tfcOceanBiome);
+                applyTransformLocked(result, skyGapBiome, tfcOceanBiome);
             } catch (Throwable throwable) {
                 AerofirmacraftTerrain.LOGGER.error(
-                        "AFC lower-ocean v10: transform failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
+                        "AFC min-y v14: transform failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
                         result.getPos().x,
                         result.getPos().z,
                         result.getClass().getName(),
@@ -109,14 +112,14 @@ public abstract class TFCChunkGeneratorMixin {
         }));
     }
 
-    private static void applyContinuousTransformLocked(
+    private static void applyTransformLocked(
             final ChunkAccess chunk,
             final Holder<Biome> skyGapBiome,
             final Holder<Biome> tfcOceanBiome
     ) {
         if (!(chunk instanceof ProtoChunk)) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC lower-ocean v10: skipped non-ProtoChunk chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
+                    "AFC min-y v14: skipped non-ProtoChunk chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
                     chunk.getPos().x,
                     chunk.getPos().z,
                     chunk.getClass().getName(),
@@ -133,7 +136,7 @@ public abstract class TFCChunkGeneratorMixin {
         }
 
         try {
-            applyContinuousTransformUnlocked(chunk, skyGapBiome, tfcOceanBiome);
+            applyTransformUnlocked(chunk, skyGapBiome, tfcOceanBiome);
             chunk.setUnsaved(true);
         } finally {
             for (LevelChunkSection section : lockedSections) {
@@ -142,7 +145,7 @@ public abstract class TFCChunkGeneratorMixin {
         }
     }
 
-    private static void applyContinuousTransformUnlocked(
+    private static void applyTransformUnlocked(
             final ChunkAccess chunk,
             final Holder<Biome> skyGapBiome,
             final Holder<Biome> tfcOceanBiome
@@ -151,6 +154,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         final int minY = chunk.getHeightAccessorForGeneration().getMinBuildHeight();
         final int maxY = chunk.getHeightAccessorForGeneration().getMaxBuildHeight() - 1;
+        final boolean extendedLowerBandAvailable = minY <= LOWER_OCEAN_TOP_Y;
 
         final int centerWorldX = chunk.getPos().getBlockX(8);
         final int centerWorldZ = chunk.getPos().getBlockZ(8);
@@ -183,26 +187,27 @@ public abstract class TFCChunkGeneratorMixin {
         int centerUndersideY = Integer.MIN_VALUE;
 
         final int oceanCrustTopY = minY + OCEAN_CRUST_THICKNESS;
+        final int lowerOceanTopY = Math.min(LOWER_OCEAN_TOP_Y, maxY);
 
         // First pass:
-        // - generate lower ocean/crust blocks
-        // - read original TFC biome identity
+        // - fill only the newly-added lower band below old TFC min Y
+        // - read original TFC surface biome identity
         // - classify reviewed TFC ocean/coastal biomes as sky gaps
         for (int localX = 0; localX < 16; localX++) {
             for (int localZ = 0; localZ < 16; localZ++) {
-                for (int y = minY; y <= oceanCrustTopY; y++) {
-                    if (y == minY) {
-                        setBlockStateUnlocked(chunk, localX, y, localZ, bedrock);
-                    } else {
-                        setBlockStateUnlocked(chunk, localX, y, localZ, stone);
+                if (extendedLowerBandAvailable) {
+                    for (int y = minY; y <= lowerOceanTopY; y++) {
+                        if (y == minY) {
+                            setBlockStateUnlocked(chunk, localX, y, localZ, bedrock);
+                            crustBlocks++;
+                        } else if (y <= oceanCrustTopY) {
+                            setBlockStateUnlocked(chunk, localX, y, localZ, stone);
+                            crustBlocks++;
+                        } else {
+                            setBlockStateUnlocked(chunk, localX, y, localZ, water);
+                            waterBlocks++;
+                        }
                     }
-
-                    crustBlocks++;
-                }
-
-                for (int y = oceanCrustTopY + 1; y <= GLOBAL_OCEAN_TOP_Y; y++) {
-                    setBlockStateUnlocked(chunk, localX, y, localZ, water);
-                    waterBlocks++;
                 }
 
                 final int surfaceY = findTopNonAirY(chunk, localX, localZ, minY, maxY);
@@ -222,15 +227,12 @@ public abstract class TFCChunkGeneratorMixin {
             }
         }
 
-        // Biome identity pass:
-        // - copied-TFC-ocean lower_ocean biome from world bottom through the Y=0 biome cell
-        // - sky_gap biome above the lower ocean for carved old-ocean/coastal gap cells
-        tfcOceanBiomeCells = assigntfcOceanBiomeCellsUnlocked(chunk, tfcOceanBiome, minY, maxY);
+        tfcOceanBiomeCells = assignTfcOceanBiomeCellsUnlocked(chunk, tfcOceanBiome, minY, maxY);
         skyGapBiomeCells = assignSkyGapBiomeCellsUnlocked(chunk, skyGapBiome, skyGapClassMap, minY, maxY);
 
         // Second pass:
-        // - sky-gap biomes become air above lower ocean
-        // - everything else stays as floating land/river/lake/pond terrain
+        // - old ocean/coastal surface biomes become air gaps down to the new lower ocean top
+        // - preserved TFC terrain becomes floating terrain with underside carved down to old TFC floor
         for (int localX = 0; localX < 16; localX++) {
             for (int localZ = 0; localZ < 16; localZ++) {
                 final int surfaceY = surfaceMap[localX][localZ];
@@ -243,9 +245,10 @@ public abstract class TFCChunkGeneratorMixin {
                         coastalSkyGapColumns++;
                     }
 
-                    final int carveTopY = clamp(surfaceY + 6, GLOBAL_OCEAN_TOP_Y + 1, maxY);
+                    final int carveBottomY = Math.max(minY, OLD_TFC_MIN_Y);
+                    final int carveTopY = clamp(surfaceY + 6, carveBottomY, maxY);
 
-                    for (int y = GLOBAL_OCEAN_TOP_Y + 1; y <= carveTopY; y++) {
+                    for (int y = carveBottomY; y <= carveTopY; y++) {
                         if (!getBlockStateUnlocked(chunk, localX, y, localZ).isAir()) {
                             setBlockStateUnlocked(chunk, localX, y, localZ, air);
                             airBlocks++;
@@ -258,8 +261,9 @@ public abstract class TFCChunkGeneratorMixin {
                     final int worldZ = chunk.getPos().getBlockZ(localZ);
 
                     final int thickness = computeColumnThickness(worldX, worldZ);
-                    final int undersideY = clamp(surfaceY - thickness, GLOBAL_OCEAN_TOP_Y + 8, maxY - 1);
+                    final int undersideY = clamp(surfaceY - thickness, OLD_TFC_MIN_Y + 8, maxY - 1);
                     final int carveTopY = undersideY - 1;
+                    final int carveBottomY = Math.max(minY, OLD_TFC_MIN_Y);
 
                     minUndersideY = Math.min(minUndersideY, undersideY);
                     maxUndersideY = Math.max(maxUndersideY, undersideY);
@@ -268,7 +272,7 @@ public abstract class TFCChunkGeneratorMixin {
                         centerUndersideY = undersideY;
                     }
 
-                    for (int y = GLOBAL_OCEAN_TOP_Y + 1; y <= carveTopY; y++) {
+                    for (int y = carveBottomY; y <= carveTopY; y++) {
                         if (!getBlockStateUnlocked(chunk, localX, y, localZ).isAir()) {
                             setBlockStateUnlocked(chunk, localX, y, localZ, air);
                             airBlocks++;
@@ -279,8 +283,8 @@ public abstract class TFCChunkGeneratorMixin {
         }
 
         if (minUndersideY == Integer.MAX_VALUE) {
-            minUndersideY = GLOBAL_OCEAN_TOP_Y + 4;
-            maxUndersideY = GLOBAL_OCEAN_TOP_Y + 4;
+            minUndersideY = OLD_TFC_MIN_Y + 4;
+            maxUndersideY = OLD_TFC_MIN_Y + 4;
         }
 
         if (centerUndersideY == Integer.MIN_VALUE) {
@@ -304,10 +308,14 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (transformIndex <= DETAILED_LOG_LIMIT) {
             AerofirmacraftTerrain.LOGGER.info(
-                    "AFC lower-ocean v10: applied index={} chunkX={} chunkZ={} centerX={} centerZ={} centerBiome={} preservedColumns={} definiteOceanSkyGapColumns={} coastalSkyGapColumns={} skyGapBiomeCells={} tfcOceanBiomeCells={} airBlocks={} crustBlocks={} waterBlocks={} surfaceY={}..{} undersideY={}..{} oceanCrustTopY={} oceanTopY={} centerSurfaceY={} centerUndersideY={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' oceanTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
+                    "AFC min-y v14: applied index={} chunkX={} chunkZ={} minY={} maxY={} extendedLowerBandAvailable={} lowerOceanTopY={} centerX={} centerZ={} centerBiome={} preservedColumns={} definiteOceanSkyGapColumns={} coastalSkyGapColumns={} skyGapBiomeCells={} tfcOceanBiomeCells={} airBlocks={} crustBlocks={} waterBlocks={} surfaceY={}..{} undersideY={}..{} centerSurfaceY={} centerUndersideY={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' lowerOceanTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
                     transformIndex,
                     chunk.getPos().x,
                     chunk.getPos().z,
+                    minY,
+                    maxY,
+                    extendedLowerBandAvailable,
+                    lowerOceanTopY,
                     centerWorldX,
                     centerWorldZ,
                     centerBiomeId,
@@ -323,8 +331,6 @@ public abstract class TFCChunkGeneratorMixin {
                     maxSurfaceY,
                     minUndersideY,
                     maxUndersideY,
-                    oceanCrustTopY,
-                    GLOBAL_OCEAN_TOP_Y,
                     centerSurfaceY,
                     centerUndersideY,
                     chunk.getPersistedStatus(),
@@ -333,18 +339,19 @@ public abstract class TFCChunkGeneratorMixin {
                     centerSurfaceY + 16,
                     centerWorldZ,
                     centerWorldX,
-                    GLOBAL_OCEAN_TOP_Y + 4,
+                    lowerOceanTopY + 4,
                     centerWorldZ,
                     centerWorldX,
-                    Math.max(GLOBAL_OCEAN_TOP_Y + 4, centerUndersideY - 8),
+                    Math.max(lowerOceanTopY + 4, centerUndersideY - 8),
                     centerWorldZ
             );
         } else if (transformIndex % SUMMARY_LOG_INTERVAL == 0) {
             AerofirmacraftTerrain.LOGGER.info(
-                    "AFC lower-ocean v10 summary: chunks={} latestChunkX={} latestChunkZ={} totalPreservedColumns={} totalDefiniteOceanSkyGapColumns={} totalCoastalSkyGapColumns={} totalSkyGapBiomeCells={} totalTfcOceanBiomeCells={} totalAirBlocks={} totalCrustBlocks={} totalWaterBlocks={} latestStatus={}",
+                    "AFC min-y v14 summary: chunks={} latestChunkX={} latestChunkZ={} latestMinY={} totalPreservedColumns={} totalDefiniteOceanSkyGapColumns={} totalCoastalSkyGapColumns={} totalSkyGapBiomeCells={} totalTfcOceanBiomeCells={} totalAirBlocks={} totalCrustBlocks={} totalWaterBlocks={} latestStatus={}",
                     transformIndex,
                     chunk.getPos().x,
                     chunk.getPos().z,
+                    minY,
                     AFC_TOTAL_PRESERVED_COLUMNS.get(),
                     AFC_TOTAL_DEFINITE_OCEAN_SKY_GAP_COLUMNS.get(),
                     AFC_TOTAL_COASTAL_SKY_GAP_COLUMNS.get(),
@@ -358,7 +365,7 @@ public abstract class TFCChunkGeneratorMixin {
         }
     }
 
-    private static int assigntfcOceanBiomeCellsUnlocked(
+    private static int assignTfcOceanBiomeCellsUnlocked(
             final ChunkAccess chunk,
             final Holder<Biome> tfcOceanBiome,
             final int minY,
@@ -378,9 +385,7 @@ public abstract class TFCChunkGeneratorMixin {
             for (int quartY = 0; quartY < 4; quartY++) {
                 final int quartBlockY = sectionMinY + quartY * 4;
 
-                // Biome cells are 4 blocks tall. Including quartBlockY == 0 means the Y=0..3 cell
-                // identifies as lower ocean, which avoids inherited surface biomes right above the waterline.
-                if (quartBlockY > GLOBAL_OCEAN_TOP_Y || quartBlockY > maxY) {
+                if (quartBlockY > LOWER_OCEAN_TOP_Y || quartBlockY > maxY) {
                     continue;
                 }
 
@@ -426,7 +431,7 @@ public abstract class TFCChunkGeneratorMixin {
             for (int quartY = 0; quartY < 4; quartY++) {
                 final int quartBlockY = sectionMinY + quartY * 4;
 
-                if (quartBlockY <= GLOBAL_OCEAN_TOP_Y || quartBlockY > maxY) {
+                if (quartBlockY <= LOWER_OCEAN_TOP_Y || quartBlockY > maxY) {
                     continue;
                 }
 
@@ -506,16 +511,16 @@ public abstract class TFCChunkGeneratorMixin {
     private static String getBiomeIdForColumn(
             final ChunkAccess chunk,
             final int localX,
-            final int surfaceY,
+            final int sampleY,
             final int localZ,
             final int minY,
             final int maxY
     ) {
-        final int sampleY = clamp(surfaceY, minY, maxY);
-        final LevelChunkSection section = chunk.getSection(chunk.getSectionIndex(sampleY));
+        final int y = clamp(sampleY, minY, maxY);
+        final LevelChunkSection section = chunk.getSection(chunk.getSectionIndex(y));
 
         final int quartLocalX = (localX >> 2) & 3;
-        final int quartLocalY = QuartPos.fromBlock(sampleY) & 3;
+        final int quartLocalY = QuartPos.fromBlock(y) & 3;
         final int quartLocalZ = (localZ >> 2) & 3;
 
         final Holder<Biome> biomeHolder = section.getNoiseBiome(quartLocalX, quartLocalY, quartLocalZ);
