@@ -14,10 +14,10 @@ public final class AerofirmacraftTerrain {
     public AerofirmacraftTerrain(IEventBus modEventBus) {
         modEventBus.addListener(this::commonSetup);
 
-        LOGGER.info("Aerofirmacraft Terrain constructed. Lower ocean biome v9 prototype active.");
+        LOGGER.info("Aerofirmacraft Terrain constructed. Lower ocean TFC-ocean v10 prototype active.");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        LOGGER.info("Aerofirmacraft Terrain common setup complete. V9 assigns copied TFC ocean biome data below Y=0.");
+        LOGGER.info("Aerofirmacraft Terrain common setup complete. V10 assigns existing tfc:ocean biome below Y=0.");
     }
 }

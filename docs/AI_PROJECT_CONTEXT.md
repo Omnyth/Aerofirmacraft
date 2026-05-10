@@ -409,3 +409,15 @@ Changes:
 - assign lower_ocean biome to biome cells from minY through the Y=0 cell
 - keep sky_gap assignment above Y=0 for carved old-ocean/coastal gaps
 - keep original TFC biomes above Y=0 for preserved islands/rivers/lakes
+
+## Current branch: terrain-tfc-noise-lower-ocean-use-tfc-ocean-v10
+
+Goal:
+Fix V9 crash by using existing tfc:ocean for the lower ocean biome layer.
+
+Changes:
+- remove custom lower_ocean.json
+- replace custom aerofirmacraft_terrain:lower_ocean biome holder with existing tfc:ocean holder
+- assign tfc:ocean to biome cells from minY through the Y=0 cell
+- keep sky_gap assignment above Y=0 for carved old-ocean/coastal gaps
+- keep original TFC biomes above Y=0 for preserved islands/rivers/lakes
