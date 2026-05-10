@@ -299,3 +299,15 @@ Changes:
 - keep 9x9 ocean-floor transform
 - keep ProtoChunk check
 - keep no registry/block-ID lookup
+
+## Current branch: terrain-tfc-noise-9x9-ocean-future-chain-locked
+
+Goal:
+Add LevelChunkSection locking to the 9x9 future-chain ocean transform.
+
+Changes:
+- keep cancellable RETURN injection
+- keep originalFuture.thenApply(...)
+- acquire/release all LevelChunkSections during block mutation
+- fix low-only chunk underside fallback from -9999 to oceanTop + 4
+- keep 9x9 bounded test

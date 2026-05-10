@@ -14,10 +14,10 @@ public final class AerofirmacraftTerrain {
     public AerofirmacraftTerrain(IEventBus modEventBus) {
         modEventBus.addListener(this::commonSetup);
 
-        LOGGER.info("Aerofirmacraft Terrain constructed. 9x9 ocean future-chain prototype active.");
+        LOGGER.info("Aerofirmacraft Terrain constructed. 9x9 ocean future-chain locked prototype active.");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        LOGGER.info("Aerofirmacraft Terrain common setup complete. 9x9 ocean transform is chained into fillFromNoise future.");
+        LOGGER.info("Aerofirmacraft Terrain common setup complete. 9x9 ocean transform is future-chained and section-locked.");
     }
 }

@@ -6,6 +6,7 @@ import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.ProtoChunk;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.blending.Blender;
@@ -14,6 +15,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -39,12 +41,12 @@ public abstract class TFCChunkGeneratorMixin {
 
     private static final int REGION_RADIUS_CHUNKS = 4;
     private static final int MAX_TRANSFORMED_CHUNKS = 81;
-    private static final int SKIP_LOG_LIMIT = 48;
+    private static final int SKIP_LOG_LIMIT = 32;
 
     private static final int OCEAN_CRUST_THICKNESS = 8;
 
     @Inject(method = "fillFromNoise", at = @At("RETURN"), cancellable = true)
-    private void afc$regionTransform9x9FutureChain(
+    private void afc$regionTransform9x9FutureChainLocked(
             final Blender blender,
             final RandomState randomState,
             final StructureManager structureManager,
@@ -55,7 +57,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (originalFuture == null) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC future-chain 9x9: fillFromNoise returned null future for chunkX={} chunkZ={}",
+                    "AFC locked 9x9: fillFromNoise returned null future for chunkX={} chunkZ={}",
                     chunk.getPos().x,
                     chunk.getPos().z
             );
@@ -67,7 +69,7 @@ public abstract class TFCChunkGeneratorMixin {
             final int transformIndex = claimChunkForTransform(result, centerSurfaceY);
 
             if (transformIndex > 0) {
-                applyFullChunkTransform(result, centerSurfaceY, transformIndex);
+                applyFullChunkTransformLocked(result, centerSurfaceY, transformIndex);
             }
 
             return result;
@@ -96,7 +98,7 @@ public abstract class TFCChunkGeneratorMixin {
                 afc$targetChunkZ = chunk.getPos().z;
 
                 AerofirmacraftTerrain.LOGGER.info(
-                        "AFC future-chain 9x9: selected target center chunkX={} chunkZ={} centerSurfaceY={}",
+                        "AFC locked 9x9: selected target center chunkX={} chunkZ={} centerSurfaceY={}",
                         afc$targetChunkX,
                         afc$targetChunkZ,
                         centerSurfaceY
@@ -124,10 +126,14 @@ public abstract class TFCChunkGeneratorMixin {
         }
     }
 
-    private static void applyFullChunkTransform(final ChunkAccess chunk, final int centerSurfaceY, final int transformIndex) {
+    private static void applyFullChunkTransformLocked(
+            final ChunkAccess chunk,
+            final int centerSurfaceY,
+            final int transformIndex
+    ) {
         if (!(chunk instanceof ProtoChunk)) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC future-chain 9x9: skipped non-ProtoChunk chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
+                    "AFC locked 9x9: skipped non-ProtoChunk chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
                     chunk.getPos().x,
                     chunk.getPos().z,
                     chunk.getClass().getName(),
@@ -136,6 +142,26 @@ public abstract class TFCChunkGeneratorMixin {
             return;
         }
 
+        final Set<LevelChunkSection> lockedSections = new HashSet<>();
+
+        for (LevelChunkSection section : chunk.getSections()) {
+            section.acquire();
+            lockedSections.add(section);
+        }
+
+        try {
+            applyFullChunkTransformUnlocked(chunk, centerSurfaceY, transformIndex);
+            chunk.setUnsaved(true);
+        } finally {
+            lockedSections.forEach(LevelChunkSection::release);
+        }
+    }
+
+    private static void applyFullChunkTransformUnlocked(
+            final ChunkAccess chunk,
+            final int centerSurfaceY,
+            final int transformIndex
+    ) {
         final int minY = chunk.getHeightAccessorForGeneration().getMinBuildHeight();
         final int maxY = chunk.getHeightAccessorForGeneration().getMaxBuildHeight() - 1;
 
@@ -231,18 +257,16 @@ public abstract class TFCChunkGeneratorMixin {
         }
 
         if (minUndersideY == Integer.MAX_VALUE) {
-            minUndersideY = -9999;
-            maxUndersideY = -9999;
+            minUndersideY = GLOBAL_OCEAN_TOP_Y + 4;
+            maxUndersideY = GLOBAL_OCEAN_TOP_Y + 4;
         }
 
         if (centerUndersideY == Integer.MIN_VALUE) {
             centerUndersideY = minUndersideY;
         }
 
-        chunk.setUnsaved(true);
-
         AerofirmacraftTerrain.LOGGER.info(
-                "AFC future-chain 9x9: applied index={} chunkX={} chunkZ={} targetChunkX={} targetChunkZ={} centerX={} centerZ={} landLikeColumns={} lowColumns={} airBlocks={} crustBlocks={} waterBlocks={} surfaceY={}..{} undersideY={}..{} oceanCrustTopY={} oceanTopY={} centerSurfaceY={} centerUndersideY={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' oceanTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
+                "AFC locked 9x9: applied index={} chunkX={} chunkZ={} targetChunkX={} targetChunkZ={} centerX={} centerZ={} landLikeColumns={} lowColumns={} airBlocks={} crustBlocks={} waterBlocks={} surfaceY={}..{} undersideY={}..{} oceanCrustTopY={} oceanTopY={} centerSurfaceY={} centerUndersideY={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' oceanTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
                 transformIndex,
                 chunk.getPos().x,
                 chunk.getPos().z,
@@ -282,7 +306,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (skip <= SKIP_LOG_LIMIT) {
             AerofirmacraftTerrain.LOGGER.info(
-                    "AFC future-chain 9x9: skipped chunkX={} chunkZ={} centerSurfaceY={} reason={}",
+                    "AFC locked 9x9: skipped chunkX={} chunkZ={} centerSurfaceY={} reason={}",
                     chunk.getPos().x,
                     chunk.getPos().z,
                     centerSurfaceY,
@@ -290,7 +314,7 @@ public abstract class TFCChunkGeneratorMixin {
             );
         } else if (skip == SKIP_LOG_LIMIT + 1) {
             AerofirmacraftTerrain.LOGGER.info(
-                    "AFC future-chain 9x9: skip log limit reached. Further skip logs suppressed."
+                    "AFC locked 9x9: skip log limit reached. Further skip logs suppressed."
             );
         }
     }
