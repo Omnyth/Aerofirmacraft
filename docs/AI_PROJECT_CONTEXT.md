@@ -372,3 +372,14 @@ Changes:
 - carve reviewed coastal/ocean-edge biomes as separate sky-gap category
 - preserve tfc:river, all lake variants, dune_sea, oceanic_mountains, and oceanic mountain/lake variants
 - log definiteOceanSkyGapColumns and coastalSkyGapColumns separately
+
+## Current branch: terrain-tfc-noise-sky-gap-biome-v7
+
+Goal:
+Add the first AFC sky-gap biome resource.
+
+Changes:
+- add data/aerofirmacraft_terrain/worldgen/biome/sky_gap.json
+- keep V6 biome-driven terrain transform unchanged
+- do not mutate biome palettes yet
+- next branch should assign aerofirmacraft_terrain:sky_gap to carved old-ocean/coastal columns
