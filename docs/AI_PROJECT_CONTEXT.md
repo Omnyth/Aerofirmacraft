@@ -449,3 +449,18 @@ Changes:
 - reduce detailed logging to first 4 chunks
 - reduce summary logging to every 512 chunks
 - add one-time dimension sanity log
+
+## Current branch: terrain-tfc-lower-ocean-y-biome-v18-no-surface-transform
+
+Goal:
+Validate lower-ocean biome/generation without any sky-gap or island surface transforms.
+
+Changes:
+- base from V15 clean baseline
+- keep min_y=-128 dimension override
+- assign tfc:ocean to lower Y range during createBiomes
+- reassign tfc:ocean after fillFromNoise for persistence
+- fill only the AFC-owned lower band with bedrock/crust/water
+- remove old-ocean sky-gap carving
+- remove preserved island underside carving
+- remove sky_gap biome assignment from generation path

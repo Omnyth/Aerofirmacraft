@@ -14,10 +14,10 @@ public final class AerofirmacraftTerrain {
     public AerofirmacraftTerrain(IEventBus modEventBus) {
         modEventBus.addListener(this::commonSetup);
 
-        LOGGER.info("Aerofirmacraft Terrain constructed. Extended min-y lower ocean v15 clean baseline active.");
+        LOGGER.info("Aerofirmacraft Terrain constructed. Lower ocean Y-biome v18 no-surface-transform baseline active.");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        LOGGER.info("Aerofirmacraft Terrain common setup complete. V15 baseline: minY=-128, AFC lower ocean below old TFC floor, old oceans become sky gaps.");
+        LOGGER.info("Aerofirmacraft Terrain common setup complete. V18 assigns tfc:ocean by lower Y range and removes sky-gap/island transforms.");
     }
 }
