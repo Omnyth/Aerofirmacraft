@@ -174,3 +174,12 @@ idea {
         downloadJavadoc = true
     }
 }
+
+//
+// AFC local TFC compile dependency.
+// Needed so the terrain addon can compile against TFC BiomeExtension / BiomeBuilder internals.
+// Runtime still comes from the actual modpack's mods folder.
+//
+dependencies {
+    compileOnly files("C:/Users/omnyt/curseforge/minecraft/Instances/Aerofirmacraft/mods/TerraFirmaCraft-NeoForge-1.21.1-4.1.1.jar")
+}
