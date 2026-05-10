@@ -33,7 +33,7 @@ public final class AFCBiomes {
 
     public static final DeferredHolder<BiomeExtension, BiomeExtension> LOWER_OCEAN_EXTENSION = EXTENSIONS.register(
             "lower_ocean",
-            () -> new BiomeBuilder()
+            () -> BiomeBuilder.builder()
                     // Copied from TFC ocean shape, then shifted downward for AFC testing.
                     // TFC ocean: BiomeNoise.ocean(seed, -26, -12), aquiferHeightOffset(-24)
                     // AFC v20 lower ocean: intentionally much lower.
