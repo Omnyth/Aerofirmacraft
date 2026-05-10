@@ -335,3 +335,16 @@ Changes:
 - replace ChunkAccess get/set block state calls with direct LevelChunkSection get/set calls
 - keep bounded 9x9 ocean transform
 - keep low-only underside fallback
+
+## Current branch: terrain-tfc-noise-continuous-ocean-locked-v3
+
+Goal:
+Move from successful bounded 9x9 locked v3 to continuous transform.
+
+Changes:
+- remove target-region cap
+- transform every generated TFC overworld ProtoChunk
+- keep future-chain RETURN injection
+- keep LevelChunkSection acquire/release
+- keep direct LevelChunkSection get/set
+- reduce logs to first 12 detailed chunks and every 128 chunk summary
