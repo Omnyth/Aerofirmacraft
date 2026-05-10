@@ -286,3 +286,17 @@ Changes:
 - still mutate only ProtoChunks at minecraft:noise
 - still avoid block/fluid registry lookups
 - check outside-region status before transform-limit status for better skip logs
+
+## Current branch: terrain-tfc-noise-continuous-ocean-transform
+
+Goal:
+Move from bounded 9x9 prototype to continuous terrain transformation.
+
+Changes:
+- remove artificial region selection and region cap
+- transform all generated TFC overworld chunks
+- keep lower ocean crust/water layer
+- keep original TFC surface height
+- avoid registry/block-ID lookups
+- reduce detailed logs after first few chunks
+- still only mutates ProtoChunks via ChunkAccess#setBlockState
