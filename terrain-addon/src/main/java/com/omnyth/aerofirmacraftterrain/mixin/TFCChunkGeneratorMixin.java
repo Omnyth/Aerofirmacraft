@@ -39,10 +39,9 @@ public abstract class TFCChunkGeneratorMixin {
     private static final int EXPECTED_DIMENSION_MIN_Y = -256;
     private static final int OLD_TFC_MIN_Y = -64;
 
-    // V20 does not place water/stone/bedrock here.
-    // It only applies the real custom biome and probes what generation does.
-    private static final int LOWER_OCEAN_WATER_TOP_Y = -193; // -65
-    private static final int LOWER_OCEAN_BIOME_TOP_Y = -189; // -61
+    private static final int LOWER_OCEAN_MIN_Y = -256;
+    private static final int LOWER_OCEAN_WATER_TOP_Y = -193;
+    private static final int LOWER_OCEAN_BIOME_TOP_Y = -189;
 
     private static final int SKY_GAP_BOTTOM_Y = LOWER_OCEAN_WATER_TOP_Y + 1;
     private static final int SKY_GAP_TOP_Y = OLD_TFC_MIN_Y - 1;
@@ -57,17 +56,13 @@ public abstract class TFCChunkGeneratorMixin {
 
     private static final AtomicBoolean AFC_DIMENSION_SANITY_LOGGED = new AtomicBoolean(false);
     private static final AtomicBoolean AFC_EXTENSION_SANITY_LOGGED = new AtomicBoolean(false);
+    private static final AtomicBoolean AFC_SALT_WATER_SANITY_LOGGED = new AtomicBoolean(false);
 
     private static final AtomicInteger AFC_PRE_NOISE_BIOME_ASSIGN_COUNT = new AtomicInteger();
-    private static final AtomicInteger AFC_POST_NOISE_PROBE_COUNT = new AtomicInteger();
+    private static final AtomicInteger AFC_LOWER_OCEAN_GENERATE_COUNT = new AtomicInteger();
 
     private static final AtomicLong AFC_TOTAL_PRE_NOISE_LOWER_OCEAN_CELLS = new AtomicLong();
     private static final AtomicLong AFC_TOTAL_POST_NOISE_LOWER_OCEAN_CELLS = new AtomicLong();
-
-    private static final AtomicLong AFC_TOTAL_LOWER_AIR_BLOCKS = new AtomicLong();
-    private static final AtomicLong AFC_TOTAL_LOWER_NON_AIR_BLOCKS = new AtomicLong();
-    private static final AtomicLong AFC_TOTAL_LOWER_FLUID_BLOCKS = new AtomicLong();
-    private static final AtomicInteger AFC_LOWER_OCEAN_GENERATE_COUNT = new AtomicInteger();
 
     private static final AtomicLong AFC_TOTAL_WATER_BLOCKS = new AtomicLong();
     private static final AtomicLong AFC_TOTAL_SKY_GAP_AIR_BLOCKS = new AtomicLong();
@@ -75,7 +70,7 @@ public abstract class TFCChunkGeneratorMixin {
     private static final AtomicLong AFC_TOTAL_SOLID_FLOOR_BLOCKS = new AtomicLong();
 
     @Inject(method = "createBiomes", at = @At("RETURN"), cancellable = true)
-    private void afc$assignRealLowerOceanCreateBiomesV20(
+    private void afc$assignLowerOceanBiomesV25b(
             final RandomState randomState,
             final Blender blender,
             final StructureManager structureManager,
@@ -86,7 +81,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (originalFuture == null) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC v25 biome: createBiomes returned null future for chunkX={} chunkZ={}",
+                    "AFC v25b biome: createBiomes returned null future for chunkX={} chunkZ={}",
                     chunk.getPos().x,
                     chunk.getPos().z
             );
@@ -105,7 +100,7 @@ public abstract class TFCChunkGeneratorMixin {
                 assignLowerOceanBiomeLocked(result, lowerOceanBiome, true);
             } catch (Throwable throwable) {
                 AerofirmacraftTerrain.LOGGER.error(
-                        "AFC v25 biome: pre-noise lower_ocean biome assignment failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
+                        "AFC v25b biome: pre-noise lower_ocean biome assignment failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
                         result.getPos().x,
                         result.getPos().z,
                         result.getClass().getName(),
@@ -120,7 +115,7 @@ public abstract class TFCChunkGeneratorMixin {
     }
 
     @Inject(method = "fillFromNoise", at = @At("RETURN"), cancellable = true)
-    private void afc$probeRealLowerOceanNoBlockFillV20(
+    private void afc$generateLowerOceanBandV25b(
             final Blender blender,
             final RandomState randomState,
             final StructureManager structureManager,
@@ -131,7 +126,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (originalFuture == null) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC v25 probe: fillFromNoise returned null future for chunkX={} chunkZ={}",
+                    "AFC v25b lower-ocean: fillFromNoise returned null future for chunkX={} chunkZ={}",
                     chunk.getPos().x,
                     chunk.getPos().z
             );
@@ -147,7 +142,7 @@ public abstract class TFCChunkGeneratorMixin {
                 generateLowerOceanLocked(result);
             } catch (Throwable throwable) {
                 AerofirmacraftTerrain.LOGGER.error(
-                        "AFC v25 probe: lower_ocean probe failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
+                        "AFC v25b lower-ocean: generation failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
                         result.getPos().x,
                         result.getPos().z,
                         result.getClass().getName(),
@@ -170,12 +165,7 @@ public abstract class TFCChunkGeneratorMixin {
             return;
         }
 
-        final Set<LevelChunkSection> lockedSections = new HashSet<>();
-
-        for (LevelChunkSection section : chunk.getSections()) {
-            section.acquire();
-            lockedSections.add(section);
-        }
+        final Set<LevelChunkSection> lockedSections = lockSections(chunk);
 
         try {
             final int minY = chunk.getHeightAccessorForGeneration().getMinBuildHeight();
@@ -191,7 +181,7 @@ public abstract class TFCChunkGeneratorMixin {
 
                 if (index <= DETAILED_LOG_LIMIT || index % SUMMARY_LOG_INTERVAL == 0) {
                     AerofirmacraftTerrain.LOGGER.info(
-                            "AFC v25 biome: index={} chunkX={} chunkZ={} minY={} lowerOceanCells={} totalPreNoiseLowerOceanCells={} status={}",
+                            "AFC v25b biome: index={} chunkX={} chunkZ={} minY={} lowerOceanCells={} totalPreNoiseLowerOceanCells={} status={}",
                             index,
                             chunk.getPos().x,
                             chunk.getPos().z,
@@ -207,17 +197,168 @@ public abstract class TFCChunkGeneratorMixin {
 
             chunk.setUnsaved(true);
         } finally {
-            for (LevelChunkSection section : lockedSections) {
-                section.release();
-            }
+            unlockSections(lockedSections);
         }
     }
 
-    private static void probeLowerBandLocked(final ChunkAccess chunk) {
+    private static void generateLowerOceanLocked(final ChunkAccess chunk) {
         if (!(chunk instanceof ProtoChunk)) {
             return;
         }
 
+        final Set<LevelChunkSection> lockedSections = lockSections(chunk);
+
+        try {
+            generateLowerOceanUnlocked(chunk);
+            chunk.setUnsaved(true);
+        } finally {
+            unlockSections(lockedSections);
+        }
+    }
+
+    private static void generateLowerOceanUnlocked(final ChunkAccess chunk) {
+        final int index = AFC_LOWER_OCEAN_GENERATE_COUNT.incrementAndGet();
+
+        final int minY = chunk.getHeightAccessorForGeneration().getMinBuildHeight();
+        final int maxY = chunk.getHeightAccessorForGeneration().getMaxBuildHeight() - 1;
+
+        logDimensionSanityOnce(minY, maxY);
+
+        final int oceanBottomY = Math.max(minY, LOWER_OCEAN_MIN_Y);
+        final int oceanTopY = Math.min(maxY, LOWER_OCEAN_WATER_TOP_Y);
+        final int skyGapBottomY = Math.max(minY, SKY_GAP_BOTTOM_Y);
+        final int skyGapTopY = Math.min(maxY, SKY_GAP_TOP_Y);
+
+        final BlockState saltWater = getSaltWaterBlockState();
+        final BlockState air = Blocks.AIR.defaultBlockState();
+
+        int waterBlocks = 0;
+        int skyGapAirBlocks = 0;
+        int solidFloorBlocks = 0;
+        int finalOceanFluidBlocks = 0;
+
+        int minFloorY = Integer.MAX_VALUE;
+        int maxFloorY = Integer.MIN_VALUE;
+        int centerFloorY = Integer.MIN_VALUE;
+
+        for (int localX = 0; localX < 16; localX++) {
+            for (int localZ = 0; localZ < 16; localZ++) {
+                final int worldX = chunk.getPos().getBlockX(localX);
+                final int worldZ = chunk.getPos().getBlockZ(localZ);
+
+                final int floorY = computeOceanFloorY(worldX, worldZ);
+                final BlockState floorState = pickFloorStateUnlocked(chunk, localX, floorY, localZ, minY);
+
+                minFloorY = Math.min(minFloorY, floorY);
+                maxFloorY = Math.max(maxFloorY, floorY);
+
+                if (localX == 8 && localZ == 8) {
+                    centerFloorY = floorY;
+                }
+
+                final int solidBottomY = Math.max(minY, floorY - OCEAN_FLOOR_SOLID_DEPTH + 1);
+
+                for (int y = solidBottomY; y <= floorY; y++) {
+                    final BlockState current = getBlockStateUnlocked(chunk, localX, y, localZ);
+
+                    if (current.isAir() || !current.getFluidState().isEmpty()) {
+                        setBlockStateUnlocked(chunk, localX, y, localZ, floorState);
+                        solidFloorBlocks++;
+                    }
+                }
+
+                for (int y = oceanBottomY; y <= oceanTopY; y++) {
+                    if (y <= floorY) {
+                        continue;
+                    }
+
+                    if (!getBlockStateUnlocked(chunk, localX, y, localZ).equals(saltWater)) {
+                        setBlockStateUnlocked(chunk, localX, y, localZ, saltWater);
+                        waterBlocks++;
+                    }
+                }
+
+                for (int y = skyGapBottomY; y <= skyGapTopY; y++) {
+                    if (!getBlockStateUnlocked(chunk, localX, y, localZ).isAir()) {
+                        setBlockStateUnlocked(chunk, localX, y, localZ, air);
+                        skyGapAirBlocks++;
+                    }
+                }
+
+                for (int y = oceanBottomY; y <= oceanTopY; y++) {
+                    final BlockState state = getBlockStateUnlocked(chunk, localX, y, localZ);
+
+                    if (!state.getFluidState().isEmpty()) {
+                        finalOceanFluidBlocks++;
+                    }
+                }
+            }
+        }
+
+        if (centerFloorY == Integer.MIN_VALUE) {
+            centerFloorY = OCEAN_FLOOR_BASE_Y;
+        }
+
+        if (minFloorY == Integer.MAX_VALUE) {
+            minFloorY = OCEAN_FLOOR_BASE_Y;
+            maxFloorY = OCEAN_FLOOR_BASE_Y;
+        }
+
+        AFC_TOTAL_WATER_BLOCKS.addAndGet(waterBlocks);
+        AFC_TOTAL_SKY_GAP_AIR_BLOCKS.addAndGet(skyGapAirBlocks);
+        AFC_TOTAL_FINAL_OCEAN_FLUID_BLOCKS.addAndGet(finalOceanFluidBlocks);
+        AFC_TOTAL_SOLID_FLOOR_BLOCKS.addAndGet(solidFloorBlocks);
+
+        if (index <= DETAILED_LOG_LIMIT || index % SUMMARY_LOG_INTERVAL == 0) {
+            final String centerBiomeAtWaterTop = getBiomeIdForColumn(chunk, 8, LOWER_OCEAN_WATER_TOP_Y, 8, minY, maxY);
+            final String centerBiomeAtBiomeCap = getBiomeIdForColumn(chunk, 8, LOWER_OCEAN_BIOME_TOP_Y, 8, minY, maxY);
+
+            final BlockState centerBottomBlock = getBlockStateUnlocked(chunk, 8, oceanBottomY, 8);
+            final BlockState centerFloorBlock = getBlockStateUnlocked(chunk, 8, clamp(centerFloorY, minY, maxY), 8);
+            final BlockState centerWaterBlock = getBlockStateUnlocked(chunk, 8, clamp(centerFloorY + 1, minY, maxY), 8);
+            final BlockState centerSurfaceBlock = getBlockStateUnlocked(chunk, 8, clamp(LOWER_OCEAN_WATER_TOP_Y, minY, maxY), 8);
+            final BlockState centerGapBlock = getBlockStateUnlocked(chunk, 8, clamp(SKY_GAP_BOTTOM_Y, minY, maxY), 8);
+
+            AerofirmacraftTerrain.LOGGER.info(
+                    "AFC v25b lower-ocean: index={} chunkX={} chunkZ={} minY={} oceanY={}..{} skyGapY={}..{} floorY={}..{} centerFloorY={} centerBiomeWaterTop={} centerBiomeBiomeCap={} waterBlocks={} solidFloorBlocks={} skyGapAirBlocks={} finalOceanFluidBlocks={} totalWaterBlocks={} totalSolidFloorBlocks={} totalSkyGapAirBlocks={} totalFinalOceanFluidBlocks={} centerBottomBlock='{}' centerFloorBlock='{}' centerWaterBlock='{}' centerSurfaceBlock='{}' centerGapBlock='{}' status={} lowerOceanTp='/tp @s {} {} {}' skyGapTp='/tp @s {} {} {}'",
+                    index,
+                    chunk.getPos().x,
+                    chunk.getPos().z,
+                    minY,
+                    oceanBottomY,
+                    oceanTopY,
+                    skyGapBottomY,
+                    skyGapTopY,
+                    minFloorY,
+                    maxFloorY,
+                    centerFloorY,
+                    centerBiomeAtWaterTop,
+                    centerBiomeAtBiomeCap,
+                    waterBlocks,
+                    solidFloorBlocks,
+                    skyGapAirBlocks,
+                    finalOceanFluidBlocks,
+                    AFC_TOTAL_WATER_BLOCKS.get(),
+                    AFC_TOTAL_SOLID_FLOOR_BLOCKS.get(),
+                    AFC_TOTAL_SKY_GAP_AIR_BLOCKS.get(),
+                    AFC_TOTAL_FINAL_OCEAN_FLUID_BLOCKS.get(),
+                    centerBottomBlock,
+                    centerFloorBlock,
+                    centerWaterBlock,
+                    centerSurfaceBlock,
+                    centerGapBlock,
+                    chunk.getPersistedStatus(),
+                    chunk.getPos().getBlockX(8),
+                    LOWER_OCEAN_WATER_TOP_Y + 4,
+                    chunk.getPos().getBlockZ(8),
+                    chunk.getPos().getBlockX(8),
+                    SKY_GAP_BOTTOM_Y + 8,
+                    chunk.getPos().getBlockZ(8)
+            );
+        }
+    }
+
+    private static Set<LevelChunkSection> lockSections(final ChunkAccess chunk) {
         final Set<LevelChunkSection> lockedSections = new HashSet<>();
 
         for (LevelChunkSection section : chunk.getSections()) {
@@ -225,80 +366,12 @@ public abstract class TFCChunkGeneratorMixin {
             lockedSections.add(section);
         }
 
-        try {
-            final int index = AFC_POST_NOISE_PROBE_COUNT.incrementAndGet();
+        return lockedSections;
+    }
 
-            final int minY = chunk.getHeightAccessorForGeneration().getMinBuildHeight();
-            final int maxY = chunk.getHeightAccessorForGeneration().getMaxBuildHeight() - 1;
-
-            logDimensionSanityOnce(minY, maxY);
-
-            int lowerAirBlocks = 0;
-            int lowerNonAirBlocks = 0;
-            int lowerFluidBlocks = 0;
-
-            final int probeBottomY = minY;
-            final int probeTopY = Math.min(LOWER_OCEAN_WATER_TOP_Y, maxY);
-
-            for (int localX = 0; localX < 16; localX++) {
-                for (int localZ = 0; localZ < 16; localZ++) {
-                    for (int y = probeBottomY; y <= probeTopY; y++) {
-                        final BlockState state = getBlockStateUnlocked(chunk, localX, y, localZ);
-
-                        if (state.isAir()) {
-                            lowerAirBlocks++;
-                        } else {
-                            lowerNonAirBlocks++;
-                        }
-
-                        if (!state.getFluidState().isEmpty()) {
-                            lowerFluidBlocks++;
-                        }
-                    }
-                }
-            }
-
-            AFC_TOTAL_LOWER_AIR_BLOCKS.addAndGet(lowerAirBlocks);
-            AFC_TOTAL_LOWER_NON_AIR_BLOCKS.addAndGet(lowerNonAirBlocks);
-            AFC_TOTAL_LOWER_FLUID_BLOCKS.addAndGet(lowerFluidBlocks);
-
-            if (index <= DETAILED_LOG_LIMIT || index % SUMMARY_LOG_INTERVAL == 0) {
-                final String centerBiomeAtWaterTop = getBiomeIdForColumn(chunk, 8, LOWER_OCEAN_WATER_TOP_Y, 8, minY, maxY);
-                final String centerBiomeAtBiomeCap = getBiomeIdForColumn(chunk, 8, LOWER_OCEAN_BIOME_TOP_Y, 8, minY, maxY);
-
-                final BlockState centerBottomBlock = getBlockStateUnlocked(chunk, 8, minY, 8);
-                final BlockState centerMidBlock = getBlockStateUnlocked(chunk, 8, clamp(-96, minY, maxY), 8);
-                final BlockState centerTopBlock = getBlockStateUnlocked(chunk, 8, clamp(LOWER_OCEAN_WATER_TOP_Y, minY, maxY), 8);
-
-                AerofirmacraftTerrain.LOGGER.info(
-                        "AFC v25 probe: index={} chunkX={} chunkZ={} minY={} probeY={}..{} centerBiomeWaterTop={} centerBiomeBiomeCap={} lowerAirBlocks={} lowerNonAirBlocks={} lowerFluidBlocks={} totalLowerAirBlocks={} totalLowerNonAirBlocks={} totalLowerFluidBlocks={} centerBottomBlock='{}' centerMidBlock='{}' centerTopBlock='{}' status={} lowerBandTp='/tp @s {} {} {}'",
-                        index,
-                        chunk.getPos().x,
-                        chunk.getPos().z,
-                        minY,
-                        probeBottomY,
-                        probeTopY,
-                        centerBiomeAtWaterTop,
-                        centerBiomeAtBiomeCap,
-                        lowerAirBlocks,
-                        lowerNonAirBlocks,
-                        lowerFluidBlocks,
-                        AFC_TOTAL_LOWER_AIR_BLOCKS.get(),
-                        AFC_TOTAL_LOWER_NON_AIR_BLOCKS.get(),
-                        AFC_TOTAL_LOWER_FLUID_BLOCKS.get(),
-                        centerBottomBlock,
-                        centerMidBlock,
-                        centerTopBlock,
-                        chunk.getPersistedStatus(),
-                        chunk.getPos().getBlockX(8),
-                        LOWER_OCEAN_WATER_TOP_Y + 4,
-                        chunk.getPos().getBlockZ(8)
-                );
-            }
-        } finally {
-            for (LevelChunkSection section : lockedSections) {
-                section.release();
-            }
+    private static void unlockSections(final Set<LevelChunkSection> lockedSections) {
+        for (LevelChunkSection section : lockedSections) {
+            section.release();
         }
     }
 
@@ -308,18 +381,17 @@ public abstract class TFCChunkGeneratorMixin {
     ) {
         if (AFC_EXTENSION_SANITY_LOGGED.compareAndSet(false, true)) {
             final boolean biomePresent = biomeRegistry.getHolder(AFCBiomes.LOWER_OCEAN_BIOME_KEY).isPresent();
-
             final Optional<BiomeExtension> extension = extensionRegistry.getOptional(AFCBiomes.LOWER_OCEAN_ID);
 
             if (biomePresent && extension.isPresent()) {
                 AerofirmacraftTerrain.LOGGER.info(
-                        "AFC v25 extension sanity passed: biome={} extension={} registered=true",
+                        "AFC v25b extension sanity passed: biome={} extension={} registered=true",
                         AFCBiomes.LOWER_OCEAN_BIOME_KEY.location(),
                         AFCBiomes.LOWER_OCEAN_ID
                 );
             } else {
                 AerofirmacraftTerrain.LOGGER.warn(
-                        "AFC v25 extension sanity failed: biomePresent={} extensionPresent={} biome={} extension={}",
+                        "AFC v25b extension sanity failed: biomePresent={} extensionPresent={} biome={} extension={}",
                         biomePresent,
                         extension.isPresent(),
                         AFCBiomes.LOWER_OCEAN_BIOME_KEY.location(),
@@ -333,7 +405,7 @@ public abstract class TFCChunkGeneratorMixin {
         if (AFC_DIMENSION_SANITY_LOGGED.compareAndSet(false, true)) {
             if (minY != EXPECTED_DIMENSION_MIN_Y) {
                 AerofirmacraftTerrain.LOGGER.warn(
-                        "AFC v25 dimension sanity: expected minY={} but got minY={}. maxY={} lowerOceanWaterTopY={} lowerOceanBiomeTopY={}",
+                        "AFC v25b dimension sanity: expected minY={} but got minY={}. maxY={} lowerOceanWaterTopY={} lowerOceanBiomeTopY={}",
                         EXPECTED_DIMENSION_MIN_Y,
                         minY,
                         maxY,
@@ -342,7 +414,7 @@ public abstract class TFCChunkGeneratorMixin {
                 );
             } else {
                 AerofirmacraftTerrain.LOGGER.info(
-                        "AFC v25 dimension sanity passed: minY={} maxY={} lowerOceanWaterTopY={} lowerOceanBiomeTopY={} oldTfcMinY={}",
+                        "AFC v25b dimension sanity passed: minY={} maxY={} lowerOceanWaterTopY={} lowerOceanBiomeTopY={} oldTfcMinY={}",
                         minY,
                         maxY,
                         LOWER_OCEAN_WATER_TOP_Y,
@@ -430,154 +502,6 @@ public abstract class TFCChunkGeneratorMixin {
         return section.getBlockState(localX & 15, y & 15, localZ & 15);
     }
 
-    private static void generateLowerOceanLocked(final ChunkAccess chunk) {
-        if (!(chunk instanceof ProtoChunk)) {
-            return;
-        }
-
-        final Set<LevelChunkSection> lockedSections = new HashSet<>();
-
-        for (LevelChunkSection section : chunk.getSections()) {
-            section.acquire();
-            lockedSections.add(section);
-        }
-
-        try {
-            generateLowerOceanUnlocked(chunk);
-            chunk.setUnsaved(true);
-        } finally {
-            for (LevelChunkSection section : lockedSections) {
-                section.release();
-            }
-        }
-    }
-
-    private static void generateLowerOceanUnlocked(final ChunkAccess chunk) {
-        final int index = AFC_LOWER_OCEAN_GENERATE_COUNT.incrementAndGet();
-
-        final int minY = chunk.getHeightAccessorForGeneration().getMinBuildHeight();
-        final int maxY = chunk.getHeightAccessorForGeneration().getMaxBuildHeight() - 1;
-
-        logDimensionSanityOnce(minY, maxY);
-
-        final int oceanBottomY = minY;
-        final int oceanTopY = Math.min(LOWER_OCEAN_WATER_TOP_Y, maxY);
-        final int skyGapBottomY = Math.max(minY, SKY_GAP_BOTTOM_Y);
-        final int skyGapTopY = Math.min(maxY, SKY_GAP_TOP_Y);
-
-        final BlockState water = Blocks.WATER.defaultBlockState();
-        final BlockState air = Blocks.AIR.defaultBlockState();
-
-        int waterBlocks = 0;
-        int skyGapAirBlocks = 0;
-        int finalOceanFluidBlocks = 0;
-
-        int minFloorY = Integer.MAX_VALUE;
-        int maxFloorY = Integer.MIN_VALUE;
-        int centerFloorY = Integer.MIN_VALUE;
-
-        for (int localX = 0; localX < 16; localX++) {
-            for (int localZ = 0; localZ < 16; localZ++) {
-                final int worldX = chunk.getPos().getBlockX(localX);
-                final int worldZ = chunk.getPos().getBlockZ(localZ);
-
-                final int floorY = computeOceanFloorY(worldX, worldZ);
-
-                minFloorY = Math.min(minFloorY, floorY);
-                maxFloorY = Math.max(maxFloorY, floorY);
-
-                if (localX == 8 && localZ == 8) {
-                    centerFloorY = floorY;
-                }
-
-                for (int y = oceanBottomY; y <= oceanTopY; y++) {
-                    if (y <= floorY) {
-                        continue;
-                    }
-
-                    if (!getBlockStateUnlocked(chunk, localX, y, localZ).equals(water)) {
-                        setBlockStateUnlocked(chunk, localX, y, localZ, water);
-                        waterBlocks++;
-                    }
-                }
-
-                for (int y = skyGapBottomY; y <= skyGapTopY; y++) {
-                    if (!getBlockStateUnlocked(chunk, localX, y, localZ).isAir()) {
-                        setBlockStateUnlocked(chunk, localX, y, localZ, air);
-                        skyGapAirBlocks++;
-                    }
-                }
-
-                for (int y = oceanBottomY; y <= oceanTopY; y++) {
-                    final BlockState state = getBlockStateUnlocked(chunk, localX, y, localZ);
-
-                    if (!state.getFluidState().isEmpty()) {
-                        finalOceanFluidBlocks++;
-                    }
-                }
-            }
-        }
-
-        if (centerFloorY == Integer.MIN_VALUE) {
-            centerFloorY = OCEAN_FLOOR_BASE_Y;
-        }
-
-        if (minFloorY == Integer.MAX_VALUE) {
-            minFloorY = OCEAN_FLOOR_BASE_Y;
-            maxFloorY = OCEAN_FLOOR_BASE_Y;
-        }
-
-        AFC_TOTAL_WATER_BLOCKS.addAndGet(waterBlocks);
-        AFC_TOTAL_SKY_GAP_AIR_BLOCKS.addAndGet(skyGapAirBlocks);
-        AFC_TOTAL_FINAL_OCEAN_FLUID_BLOCKS.addAndGet(finalOceanFluidBlocks);
-
-        if (index <= DETAILED_LOG_LIMIT || index % SUMMARY_LOG_INTERVAL == 0) {
-            final String centerBiomeAtWaterTop = getBiomeIdForColumn(chunk, 8, LOWER_OCEAN_WATER_TOP_Y, 8, minY, maxY);
-            final String centerBiomeAtBiomeCap = getBiomeIdForColumn(chunk, 8, LOWER_OCEAN_BIOME_TOP_Y, 8, minY, maxY);
-
-            final BlockState centerBottomBlock = getBlockStateUnlocked(chunk, 8, oceanBottomY, 8);
-            final BlockState centerFloorBlock = getBlockStateUnlocked(chunk, 8, clamp(centerFloorY, minY, maxY), 8);
-            final BlockState centerWaterBlock = getBlockStateUnlocked(chunk, 8, clamp(centerFloorY + 1, minY, maxY), 8);
-            final BlockState centerSurfaceBlock = getBlockStateUnlocked(chunk, 8, clamp(LOWER_OCEAN_WATER_TOP_Y, minY, maxY), 8);
-            final BlockState centerGapBlock = getBlockStateUnlocked(chunk, 8, clamp(SKY_GAP_BOTTOM_Y, minY, maxY), 8);
-
-            AerofirmacraftTerrain.LOGGER.info(
-                    "AFC v25 lower-ocean: index={} chunkX={} chunkZ={} minY={} oceanY={}..{} skyGapY={}..{} floorY={}..{} centerFloorY={} centerBiomeWaterTop={} centerBiomeBiomeCap={} waterBlocks={} skyGapAirBlocks={} finalOceanFluidBlocks={} totalWaterBlocks={} totalSkyGapAirBlocks={} totalFinalOceanFluidBlocks={} centerBottomBlock='{}' centerFloorBlock='{}' centerWaterBlock='{}' centerSurfaceBlock='{}' centerGapBlock='{}' status={} lowerOceanTp='/tp @s {} {} {}' skyGapTp='/tp @s {} {} {}'",
-                    index,
-                    chunk.getPos().x,
-                    chunk.getPos().z,
-                    minY,
-                    oceanBottomY,
-                    oceanTopY,
-                    skyGapBottomY,
-                    skyGapTopY,
-                    minFloorY,
-                    maxFloorY,
-                    centerFloorY,
-                    centerBiomeAtWaterTop,
-                    centerBiomeAtBiomeCap,
-                    waterBlocks,
-                    skyGapAirBlocks,
-                    finalOceanFluidBlocks,
-                    AFC_TOTAL_WATER_BLOCKS.get(),
-                    AFC_TOTAL_SKY_GAP_AIR_BLOCKS.get(),
-                    AFC_TOTAL_FINAL_OCEAN_FLUID_BLOCKS.get(),
-                    centerBottomBlock,
-                    centerFloorBlock,
-                    centerWaterBlock,
-                    centerSurfaceBlock,
-                    centerGapBlock,
-                    chunk.getPersistedStatus(),
-                    chunk.getPos().getBlockX(8),
-                    LOWER_OCEAN_WATER_TOP_Y + 4,
-                    chunk.getPos().getBlockZ(8),
-                    chunk.getPos().getBlockX(8),
-                    SKY_GAP_BOTTOM_Y + 8,
-                    chunk.getPos().getBlockZ(8)
-            );
-        }
-    }
-
     private static void setBlockStateUnlocked(
             final ChunkAccess chunk,
             final int localX,
@@ -587,6 +511,54 @@ public abstract class TFCChunkGeneratorMixin {
     ) {
         final LevelChunkSection section = chunk.getSection(chunk.getSectionIndex(y));
         section.setBlockState(localX & 15, y & 15, localZ & 15, state, false);
+    }
+
+    private static BlockState getSaltWaterBlockState() {
+        final ResourceLocation saltWaterId = ResourceLocation.fromNamespaceAndPath("tfc", "salt_water");
+        final BlockState state = BuiltInRegistries.FLUID.get(saltWaterId)
+                .defaultFluidState()
+                .createLegacyBlock();
+
+        if (AFC_SALT_WATER_SANITY_LOGGED.compareAndSet(false, true)) {
+            AerofirmacraftTerrain.LOGGER.info(
+                    "AFC v25b salt water sanity: fluid={} blockState='{}'",
+                    saltWaterId,
+                    state
+            );
+        }
+
+        return state;
+    }
+
+    private static BlockState pickFloorStateUnlocked(
+            final ChunkAccess chunk,
+            final int localX,
+            final int floorY,
+            final int localZ,
+            final int minY
+    ) {
+        for (int y = floorY; y >= minY; y--) {
+            final BlockState state = getBlockStateUnlocked(chunk, localX, y, localZ);
+
+            if (isUsableFloorState(state)) {
+                return state;
+            }
+        }
+
+        return BuiltInRegistries.BLOCK.get(ResourceLocation.fromNamespaceAndPath("tfc", "rock/raw/granite"))
+                .defaultBlockState();
+    }
+
+    private static boolean isUsableFloorState(final BlockState state) {
+        if (state.isAir() || !state.getFluidState().isEmpty()) {
+            return false;
+        }
+
+        final ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+
+        return blockId != null
+                && "tfc".equals(blockId.getNamespace())
+                && blockId.getPath().startsWith("rock/raw/");
     }
 
     private static int computeOceanFloorY(final int worldX, final int worldZ) {
@@ -612,6 +584,7 @@ public abstract class TFCChunkGeneratorMixin {
         h ^= (h >>> 16);
         return h;
     }
+
     private static int clamp(final int value, final int min, final int max) {
         return Math.max(min, Math.min(max, value));
     }
