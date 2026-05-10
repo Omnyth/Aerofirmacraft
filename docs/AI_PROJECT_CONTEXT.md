@@ -435,3 +435,17 @@ Changes:
 - keep sky_gap above lower ocean for old ocean/coastal biomes
 - preserve original TFC biomes above lower ocean for land/rivers/lakes
 - fresh-world only test
+
+## Current branch: terrain-tfc-extend-min-y-lower-ocean-v15-clean-baseline
+
+Goal:
+Make V14 the clean baseline.
+
+Changes:
+- keep overworld min_y=-128 architecture
+- keep AFC-owned lower band below old TFC floor
+- keep tfc:ocean biome cells in the lower ocean band
+- keep sky_gap biome cells in old ocean/coastal sky-gap areas
+- reduce detailed logging to first 4 chunks
+- reduce summary logging to every 512 chunks
+- add one-time dimension sanity log
