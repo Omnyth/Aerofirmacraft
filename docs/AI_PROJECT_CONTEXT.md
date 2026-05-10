@@ -545,3 +545,16 @@ Changes:
 - inject calculateNoiseAtHeight for Y=-256..-193
 - return density from lower_ocean BiomeNoiseSampler
 - no manual water/stone/bedrock fill
+
+## Current branch: terrain-tfc-real-lower-ocean-biome-v23a-disable-noise-mixin
+
+Goal:
+Recover from V23 startup stop by disabling the direct ChunkNoiseFillerMixin.
+
+Changes:
+- remove ChunkNoiseFillerMixin.java
+- remove ChunkNoiseFillerMixin from aerofirmacraft_terrain.mixins.json
+- keep min_y=-256 dimension/noise settings
+- keep real lower_ocean BiomeExtension
+- keep lower Y biome assignment/probe
+- no manual water/stone/bedrock fill

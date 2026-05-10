@@ -17,10 +17,10 @@ public final class AerofirmacraftTerrain {
 
         modEventBus.addListener(this::commonSetup);
 
-        LOGGER.info("Aerofirmacraft Terrain constructed. Real TFC-compatible lower_ocean biome v23 lower-ocean noise hook diagnostic active.");
+        LOGGER.info("Aerofirmacraft Terrain constructed. Real TFC-compatible lower_ocean biome v23a startup-safe lower-ocean diagnostic active.");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        LOGGER.info("Aerofirmacraft Terrain common setup complete. V23 keeps minY=-256 and makes the lower band sample lower_ocean terrain noise.");
+        LOGGER.info("Aerofirmacraft Terrain common setup complete. V23a disables the direct ChunkNoiseFiller mixin and keeps the minY=-256 lower_ocean diagnostic baseline.");
     }
 }
