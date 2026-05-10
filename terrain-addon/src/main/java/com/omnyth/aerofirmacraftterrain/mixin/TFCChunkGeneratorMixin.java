@@ -46,8 +46,10 @@ public abstract class TFCChunkGeneratorMixin {
     private static final int SKIP_LOG_LIMIT = 32;
     private static final int PENDING_CHUNK_LIMIT = 96;
 
+    private static final int OCEAN_CRUST_THICKNESS = 8;
+
     @Inject(method = "fillFromNoise", at = @At("RETURN"))
-    private void afc$regionTransform5x5(
+    private void afc$regionTransform5x5OceanFloor(
             final Blender blender,
             final RandomState randomState,
             final StructureManager structureManager,
@@ -58,7 +60,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (future == null) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC region 5x5: fillFromNoise returned null future for chunkX={} chunkZ={}",
+                    "AFC ocean floor: fillFromNoise returned null future for chunkX={} chunkZ={}",
                     chunk.getPos().x,
                     chunk.getPos().z
             );
@@ -68,7 +70,7 @@ public abstract class TFCChunkGeneratorMixin {
         future.whenComplete((result, throwable) -> {
             if (throwable != null) {
                 AerofirmacraftTerrain.LOGGER.error(
-                        "AFC region 5x5: fillFromNoise future failed for chunkX={} chunkZ={}",
+                        "AFC ocean floor: fillFromNoise future failed for chunkX={} chunkZ={}",
                         chunk.getPos().x,
                         chunk.getPos().z,
                         throwable
@@ -106,7 +108,7 @@ public abstract class TFCChunkGeneratorMixin {
                 afc$targetChunkZ = chunk.getPos().z;
 
                 AerofirmacraftTerrain.LOGGER.info(
-                        "AFC region 5x5: selected target center chunkX={} chunkZ={} centerSurfaceY={}",
+                        "AFC ocean floor: selected target center chunkX={} chunkZ={} centerSurfaceY={}",
                         afc$targetChunkX,
                         afc$targetChunkZ,
                         centerSurfaceY
@@ -178,14 +180,17 @@ public abstract class TFCChunkGeneratorMixin {
         final int centerWorldZ = chunk.getPos().getBlockZ(8);
 
         final BlockState air = Blocks.AIR.defaultBlockState();
-        final BlockState glowstone = Blocks.GLOWSTONE.defaultBlockState();
+        final BlockState bedrock = Blocks.BEDROCK.defaultBlockState();
+        final BlockState stone = Blocks.STONE.defaultBlockState();
+        final BlockState water = Blocks.WATER.defaultBlockState();
 
         final BlockPos.MutableBlockPos mutablePos = new BlockPos.MutableBlockPos();
 
         int landLikeColumns = 0;
         int lowColumns = 0;
         int airBlocks = 0;
-        int markerBlocks = 0;
+        int crustBlocks = 0;
+        int waterBlocks = 0;
 
         int minSurfaceY = Integer.MAX_VALUE;
         int maxSurfaceY = Integer.MIN_VALUE;
@@ -193,10 +198,31 @@ public abstract class TFCChunkGeneratorMixin {
         int maxUndersideY = Integer.MIN_VALUE;
         int centerUndersideY = Integer.MIN_VALUE;
 
+        final int oceanCrustTopY = minY + OCEAN_CRUST_THICKNESS;
+
         for (int localX = 0; localX < 16; localX++) {
             for (int localZ = 0; localZ < 16; localZ++) {
                 final int worldX = chunk.getPos().getBlockX(localX);
                 final int worldZ = chunk.getPos().getBlockZ(localZ);
+
+                // Lower ocean/crust layer.
+                for (int y = minY; y <= oceanCrustTopY; y++) {
+                    mutablePos.set(worldX, y, worldZ);
+
+                    if (y == minY) {
+                        chunk.setBlockState(mutablePos, bedrock, false);
+                    } else {
+                        chunk.setBlockState(mutablePos, stone, false);
+                    }
+
+                    crustBlocks++;
+                }
+
+                for (int y = oceanCrustTopY + 1; y <= GLOBAL_OCEAN_TOP_Y; y++) {
+                    mutablePos.set(worldX, y, worldZ);
+                    chunk.setBlockState(mutablePos, water, false);
+                    waterBlocks++;
+                }
 
                 final int surfaceY = findTopNonAirY(chunk, worldX, worldZ, minY, maxY);
 
@@ -230,12 +256,6 @@ public abstract class TFCChunkGeneratorMixin {
                         centerUndersideY = undersideY;
                     }
 
-                    if ((localX % 4 == 0) && (localZ % 4 == 0)) {
-                        mutablePos.set(worldX, undersideY, worldZ);
-                        chunk.setBlockState(mutablePos, glowstone, false);
-                        markerBlocks++;
-                    }
-
                     for (int y = GLOBAL_OCEAN_TOP_Y + 1; y <= carveTopY; y++) {
                         mutablePos.set(worldX, y, worldZ);
 
@@ -260,7 +280,7 @@ public abstract class TFCChunkGeneratorMixin {
         chunk.setUnsaved(true);
 
         AerofirmacraftTerrain.LOGGER.info(
-                "AFC region 5x5: applied index={} chunkX={} chunkZ={} targetChunkX={} targetChunkZ={} centerX={} centerZ={} landLikeColumns={} lowColumns={} airBlocks={} markerBlocks={} surfaceY={}..{} undersideY={}..{} centerSurfaceY={} centerUndersideY={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
+                "AFC ocean floor: applied index={} chunkX={} chunkZ={} targetChunkX={} targetChunkZ={} centerX={} centerZ={} landLikeColumns={} lowColumns={} airBlocks={} crustBlocks={} waterBlocks={} surfaceY={}..{} undersideY={}..{} oceanCrustTopY={} oceanTopY={} centerSurfaceY={} centerUndersideY={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' oceanTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
                 transformIndex,
                 chunk.getPos().x,
                 chunk.getPos().z,
@@ -271,17 +291,23 @@ public abstract class TFCChunkGeneratorMixin {
                 landLikeColumns,
                 lowColumns,
                 airBlocks,
-                markerBlocks,
+                crustBlocks,
+                waterBlocks,
                 minSurfaceY,
                 maxSurfaceY,
                 minUndersideY,
                 maxUndersideY,
+                oceanCrustTopY,
+                GLOBAL_OCEAN_TOP_Y,
                 centerSurfaceY,
                 centerUndersideY,
                 chunk.getPersistedStatus(),
                 chunk.getClass().getName(),
                 centerWorldX,
                 centerSurfaceY + 16,
+                centerWorldZ,
+                centerWorldX,
+                GLOBAL_OCEAN_TOP_Y + 4,
                 centerWorldZ,
                 centerWorldX,
                 Math.max(GLOBAL_OCEAN_TOP_Y + 4, centerUndersideY - 8),
@@ -294,7 +320,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (skip <= SKIP_LOG_LIMIT) {
             AerofirmacraftTerrain.LOGGER.info(
-                    "AFC region 5x5: skipped chunkX={} chunkZ={} centerSurfaceY={} reason={}",
+                    "AFC ocean floor: skipped chunkX={} chunkZ={} centerSurfaceY={} reason={}",
                     chunk.getPos().x,
                     chunk.getPos().z,
                     centerSurfaceY,
@@ -302,7 +328,7 @@ public abstract class TFCChunkGeneratorMixin {
             );
         } else if (skip == SKIP_LOG_LIMIT + 1) {
             AerofirmacraftTerrain.LOGGER.info(
-                    "AFC region 5x5: skip log limit reached. Further skip logs suppressed."
+                    "AFC ocean floor: skip log limit reached. Further skip logs suppressed."
             );
         }
     }

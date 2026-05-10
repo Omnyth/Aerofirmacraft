@@ -259,3 +259,16 @@ Changes:
 - centerUndersideY fallback fixed for low-center chunks
 - still avoids registry/block-ID lookups
 - still only mutates ProtoChunks at minecraft:noise
+
+## Current branch: terrain-tfc-noise-5x5-ocean-floor-prototype
+
+Goal:
+Add a simple lower ocean layer under the working 5x5 floating-island transform.
+
+Changes:
+- remove glowstone debug markers
+- add bottom crust using bedrock + vanilla stone
+- fill lower water column up to Y=0
+- keep original TFC surface height
+- still mutate only ProtoChunks at minecraft:noise
+- still avoid block/fluid registry lookups
