@@ -477,3 +477,23 @@ Changes:
 - reassign tfc:ocean after fillFromNoise
 - remove all bedrock/stone/water placement in lower band
 - probe lowerAirBlocks/lowerNonAirBlocks/lowerFluidBlocks
+
+## Current branch: terrain-tfc-real-lower-ocean-biome-v20
+
+Goal:
+Register an actual TFC-compatible lower_ocean biome extension instead of only assigning a biome ID.
+
+Changes:
+- add data/aerofirmacraft_terrain/worldgen/biome/lower_ocean.json copied from TFC ocean JSON
+- add AFCBiomes DeferredRegister for TFCBiomes.KEY
+- register aerofirmacraft_terrain:lower_ocean BiomeExtension
+- copy/edit TFC ocean extension parameters:
+  - BiomeNoise.ocean(seed, -90, -76)
+  - ShoreAndOceanSurfaceBuilder.OCEAN
+  - aquiferHeightOffset(-88)
+  - salty
+  - BiomeBlendType.OCEAN
+  - noRivers
+- assign lower Y biome cells to aerofirmacraft_terrain:lower_ocean
+- no manual water/stone/bedrock fill
+- no sky-gap/island carving
