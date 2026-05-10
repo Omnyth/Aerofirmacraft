@@ -14,10 +14,10 @@ public final class AerofirmacraftTerrain {
     public AerofirmacraftTerrain(IEventBus modEventBus) {
         modEventBus.addListener(this::commonSetup);
 
-        LOGGER.info("Aerofirmacraft Terrain constructed. Height-gated land patch prototype active.");
+        LOGGER.info("Aerofirmacraft Terrain constructed. Full-chunk noise-stage transform prototype active.");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        LOGGER.info("Aerofirmacraft Terrain common setup complete. Height-gated one-chunk 8x8 patch only.");
+        LOGGER.info("Aerofirmacraft Terrain common setup complete. One full 16x16 ProtoChunk transform only.");
     }
 }

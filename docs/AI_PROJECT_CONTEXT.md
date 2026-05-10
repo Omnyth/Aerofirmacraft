@@ -208,3 +208,15 @@ Behavior:
 - skip chunks until center surface height >= 66
 - mutate one ProtoChunk only
 - use ChunkAccess#setBlockState only
+
+## Current branch: terrain-tfc-noise-full-chunk-transform
+
+Goal:
+Scale the height-gated transform from an 8x8 patch to one full 16x16 ProtoChunk.
+
+Design:
+- preserve original TFC surface Y to avoid disrupting climate assumptions
+- carve underneath instead of moving islands
+- use thicker island mass for later ore validation
+- avoid block/fluid registry lookups because previous registry-ID classifiers triggered tfc:salt_water crashes
+- mutate only one ProtoChunk at minecraft:noise

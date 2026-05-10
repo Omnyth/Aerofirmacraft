@@ -19,18 +19,20 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 @Mixin(targets = "net.dries007.tfc.world.TFCChunkGenerator", remap = false)
 public abstract class TFCChunkGeneratorMixin {
-    private static final AtomicBoolean AFC_DID_PATCH = new AtomicBoolean(false);
+    private static final AtomicBoolean AFC_DID_TRANSFORM = new AtomicBoolean(false);
     private static final AtomicInteger AFC_SKIP_COUNT = new AtomicInteger();
 
     private static final int GLOBAL_OCEAN_TOP_Y = 0;
     private static final int LAND_TRIGGER_SURFACE_Y = 66;
-    private static final int LAND_MASS_THICKNESS = 14;
-    private static final int PATCH_MIN_LOCAL = 4;
-    private static final int PATCH_MAX_LOCAL = 11;
+
+    // Bigger than the test patch so we preserve enough mass for later ore testing.
+    private static final int BASE_LAND_MASS_THICKNESS = 44;
+    private static final int THICKNESS_VARIATION = 10;
+
     private static final int SKIP_LOG_LIMIT = 32;
 
     @Inject(method = "fillFromNoise", at = @At("RETURN"))
-    private void afc$heightGatedLandPatch(
+    private void afc$fullChunkTransform(
             final Blender blender,
             final RandomState randomState,
             final StructureManager structureManager,
@@ -41,7 +43,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (future == null) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC height patch: fillFromNoise returned null future for chunkX={} chunkZ={}",
+                    "AFC full transform: fillFromNoise returned null future for chunkX={} chunkZ={}",
                     chunk.getPos().x,
                     chunk.getPos().z
             );
@@ -51,7 +53,7 @@ public abstract class TFCChunkGeneratorMixin {
         future.whenComplete((result, throwable) -> {
             if (throwable != null) {
                 AerofirmacraftTerrain.LOGGER.error(
-                        "AFC height patch: fillFromNoise future failed for chunkX={} chunkZ={}",
+                        "AFC full transform: fillFromNoise future failed for chunkX={} chunkZ={}",
                         chunk.getPos().x,
                         chunk.getPos().z,
                         throwable
@@ -59,7 +61,7 @@ public abstract class TFCChunkGeneratorMixin {
                 return;
             }
 
-            if (AFC_DID_PATCH.get()) {
+            if (AFC_DID_TRANSFORM.get()) {
                 return;
             }
 
@@ -74,7 +76,7 @@ public abstract class TFCChunkGeneratorMixin {
 
                 if (skip <= SKIP_LOG_LIMIT) {
                     AerofirmacraftTerrain.LOGGER.info(
-                            "AFC height patch: skipped chunkX={} chunkZ={} centerSurfaceY={} requiredSurfaceY={}",
+                            "AFC full transform: skipped chunkX={} chunkZ={} centerSurfaceY={} requiredSurfaceY={}",
                             result.getPos().x,
                             result.getPos().z,
                             centerSurfaceY,
@@ -82,22 +84,22 @@ public abstract class TFCChunkGeneratorMixin {
                     );
                 } else if (skip == SKIP_LOG_LIMIT + 1) {
                     AerofirmacraftTerrain.LOGGER.info(
-                            "AFC height patch: skip log limit reached. Further skip logs suppressed."
+                            "AFC full transform: skip log limit reached. Further skip logs suppressed."
                     );
                 }
 
                 return;
             }
 
-            if (!AFC_DID_PATCH.compareAndSet(false, true)) {
+            if (!AFC_DID_TRANSFORM.compareAndSet(false, true)) {
                 return;
             }
 
-            applyPatch(result, centerSurfaceY);
+            applyFullChunkTransform(result, centerSurfaceY);
         });
     }
 
-    private static void applyPatch(final ChunkAccess chunk, final int centerSurfaceY) {
+    private static void applyFullChunkTransform(final ChunkAccess chunk, final int centerSurfaceY) {
         final int minY = chunk.getHeightAccessorForGeneration().getMinBuildHeight();
         final int maxY = chunk.getHeightAccessorForGeneration().getMaxBuildHeight() - 1;
 
@@ -109,7 +111,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         final BlockPos.MutableBlockPos mutablePos = new BlockPos.MutableBlockPos();
 
-        int highColumns = 0;
+        int landLikeColumns = 0;
         int lowColumns = 0;
         int airBlocks = 0;
         int markerBlocks = 0;
@@ -120,8 +122,8 @@ public abstract class TFCChunkGeneratorMixin {
         int maxUndersideY = Integer.MIN_VALUE;
         int centerUndersideY = minY;
 
-        for (int localX = PATCH_MIN_LOCAL; localX <= PATCH_MAX_LOCAL; localX++) {
-            for (int localZ = PATCH_MIN_LOCAL; localZ <= PATCH_MAX_LOCAL; localZ++) {
+        for (int localX = 0; localX < 16; localX++) {
+            for (int localZ = 0; localZ < 16; localZ++) {
                 final int worldX = chunk.getPos().getBlockX(localX);
                 final int worldZ = chunk.getPos().getBlockZ(localZ);
 
@@ -133,6 +135,8 @@ public abstract class TFCChunkGeneratorMixin {
                 if (surfaceY < LAND_TRIGGER_SURFACE_Y) {
                     lowColumns++;
 
+                    // Treat lower columns as ocean/shore/lowland-like for this prototype:
+                    // clear above the future low ocean layer, but do not do registry checks.
                     final int carveTopY = clamp(surfaceY + 6, GLOBAL_OCEAN_TOP_Y + 1, maxY);
 
                     for (int y = GLOBAL_OCEAN_TOP_Y + 1; y <= carveTopY; y++) {
@@ -144,9 +148,10 @@ public abstract class TFCChunkGeneratorMixin {
                         }
                     }
                 } else {
-                    highColumns++;
+                    landLikeColumns++;
 
-                    final int undersideY = clamp(surfaceY - LAND_MASS_THICKNESS, GLOBAL_OCEAN_TOP_Y + 8, maxY - 1);
+                    final int thickness = computeColumnThickness(worldX, worldZ);
+                    final int undersideY = clamp(surfaceY - thickness, GLOBAL_OCEAN_TOP_Y + 8, maxY - 1);
                     final int carveTopY = undersideY - 1;
 
                     minUndersideY = Math.min(minUndersideY, undersideY);
@@ -156,9 +161,12 @@ public abstract class TFCChunkGeneratorMixin {
                         centerUndersideY = undersideY;
                     }
 
-                    mutablePos.set(worldX, undersideY, worldZ);
-                    chunk.setBlockState(mutablePos, glowstone, false);
-                    markerBlocks++;
+                    // Mark every 4th underside column with glowstone so the shape is visible without filling the whole underside.
+                    if ((localX % 4 == 0) && (localZ % 4 == 0)) {
+                        mutablePos.set(worldX, undersideY, worldZ);
+                        chunk.setBlockState(mutablePos, glowstone, false);
+                        markerBlocks++;
+                    }
 
                     for (int y = GLOBAL_OCEAN_TOP_Y + 1; y <= carveTopY; y++) {
                         mutablePos.set(worldX, y, worldZ);
@@ -180,12 +188,12 @@ public abstract class TFCChunkGeneratorMixin {
         chunk.setUnsaved(true);
 
         AerofirmacraftTerrain.LOGGER.info(
-                "AFC height patch: applied chunkX={} chunkZ={} centerX={} centerZ={} highColumns={} lowColumns={} airBlocks={} markerBlocks={} surfaceY={}..{} undersideY={}..{} centerSurfaceY={} centerUndersideY={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
+                "AFC full transform: applied chunkX={} chunkZ={} centerX={} centerZ={} landLikeColumns={} lowColumns={} airBlocks={} markerBlocks={} surfaceY={}..{} undersideY={}..{} centerSurfaceY={} centerUndersideY={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
                 chunk.getPos().x,
                 chunk.getPos().z,
                 centerWorldX,
                 centerWorldZ,
-                highColumns,
+                landLikeColumns,
                 lowColumns,
                 airBlocks,
                 markerBlocks,
@@ -198,10 +206,10 @@ public abstract class TFCChunkGeneratorMixin {
                 chunk.getPersistedStatus(),
                 chunk.getClass().getName(),
                 centerWorldX,
-                centerSurfaceY + 12,
+                centerSurfaceY + 16,
                 centerWorldZ,
                 centerWorldX,
-                Math.max(GLOBAL_OCEAN_TOP_Y + 4, centerUndersideY - 6),
+                Math.max(GLOBAL_OCEAN_TOP_Y + 4, centerUndersideY - 8),
                 centerWorldZ
         );
     }
@@ -224,6 +232,19 @@ public abstract class TFCChunkGeneratorMixin {
         }
 
         return minY;
+    }
+
+    private static int computeColumnThickness(final int worldX, final int worldZ) {
+        final int noise = Math.floorMod(hash(worldX, worldZ), THICKNESS_VARIATION * 2 + 1) - THICKNESS_VARIATION;
+        return BASE_LAND_MASS_THICKNESS + noise;
+    }
+
+    private static int hash(final int x, final int z) {
+        int h = x * 73428767 ^ z * 912367;
+        h ^= (h >>> 13);
+        h *= 1274126177;
+        h ^= (h >>> 16);
+        return h;
     }
 
     private static int clamp(final int value, final int min, final int max) {
