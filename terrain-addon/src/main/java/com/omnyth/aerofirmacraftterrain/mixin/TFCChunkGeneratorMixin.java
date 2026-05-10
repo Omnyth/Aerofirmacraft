@@ -1,7 +1,6 @@
 package com.omnyth.aerofirmacraftterrain.mixin;
 
 import com.omnyth.aerofirmacraftterrain.AerofirmacraftTerrain;
-import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -49,7 +48,7 @@ public abstract class TFCChunkGeneratorMixin {
     private static final int OCEAN_CRUST_THICKNESS = 8;
 
     @Inject(method = "fillFromNoise", at = @At("RETURN"), cancellable = true)
-    private void afc$regionTransform9x9FutureChainLockedV2(
+    private void afc$regionTransform9x9FutureChainLockedV3(
             final Blender blender,
             final RandomState randomState,
             final StructureManager structureManager,
@@ -60,7 +59,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (originalFuture == null) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC locked v2: fillFromNoise returned null future for chunkX={} chunkZ={}",
+                    "AFC locked v3: fillFromNoise returned null future for chunkX={} chunkZ={}",
                     chunk.getPos().x,
                     chunk.getPos().z
             );
@@ -72,7 +71,7 @@ public abstract class TFCChunkGeneratorMixin {
                 applyMaybeTransformLocked(result);
             } catch (Throwable throwable) {
                 AerofirmacraftTerrain.LOGGER.error(
-                        "AFC locked v2: transform failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
+                        "AFC locked v3: transform failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
                         result.getPos().x,
                         result.getPos().z,
                         result.getClass().getName(),
@@ -89,7 +88,7 @@ public abstract class TFCChunkGeneratorMixin {
     private static void applyMaybeTransformLocked(final ChunkAccess chunk) {
         if (!(chunk instanceof ProtoChunk)) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC locked v2: skipped non-ProtoChunk chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
+                    "AFC locked v3: skipped non-ProtoChunk chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
                     chunk.getPos().x,
                     chunk.getPos().z,
                     chunk.getClass().getName(),
@@ -102,7 +101,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (lockAttemptIndex <= LOCK_LOG_LIMIT) {
             AerofirmacraftTerrain.LOGGER.info(
-                    "AFC locked v2: attempting section locks index={} chunkX={} chunkZ={} chunkStatus={}",
+                    "AFC locked v3: attempting section locks index={} chunkX={} chunkZ={} chunkStatus={}",
                     lockAttemptIndex,
                     chunk.getPos().x,
                     chunk.getPos().z,
@@ -119,7 +118,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (lockAttemptIndex <= LOCK_LOG_LIMIT) {
             AerofirmacraftTerrain.LOGGER.info(
-                    "AFC locked v2: acquired section locks index={} chunkX={} chunkZ={} sectionCount={}",
+                    "AFC locked v3: acquired section locks index={} chunkX={} chunkZ={} sectionCount={}",
                     lockAttemptIndex,
                     chunk.getPos().x,
                     chunk.getPos().z,
@@ -142,7 +141,7 @@ public abstract class TFCChunkGeneratorMixin {
 
             if (lockAttemptIndex <= LOCK_LOG_LIMIT) {
                 AerofirmacraftTerrain.LOGGER.info(
-                        "AFC locked v2: released section locks index={} chunkX={} chunkZ={}",
+                        "AFC locked v3: released section locks index={} chunkX={} chunkZ={}",
                         lockAttemptIndex,
                         chunk.getPos().x,
                         chunk.getPos().z
@@ -154,10 +153,8 @@ public abstract class TFCChunkGeneratorMixin {
     private static int getCenterSurfaceYUnlocked(final ChunkAccess chunk) {
         final int minY = chunk.getHeightAccessorForGeneration().getMinBuildHeight();
         final int maxY = chunk.getHeightAccessorForGeneration().getMaxBuildHeight() - 1;
-        final int centerWorldX = chunk.getPos().getBlockX(8);
-        final int centerWorldZ = chunk.getPos().getBlockZ(8);
 
-        return findTopNonAirY(chunk, centerWorldX, centerWorldZ, minY, maxY);
+        return findTopNonAirY(chunk, 8, 8, minY, maxY);
     }
 
     private static int claimChunkForTransform(final ChunkAccess chunk, final int centerSurfaceY) {
@@ -173,7 +170,7 @@ public abstract class TFCChunkGeneratorMixin {
                 afc$targetChunkZ = chunk.getPos().z;
 
                 AerofirmacraftTerrain.LOGGER.info(
-                        "AFC locked v2: selected target center chunkX={} chunkZ={} centerSurfaceY={}",
+                        "AFC locked v3: selected target center chunkX={} chunkZ={} centerSurfaceY={}",
                         afc$targetChunkX,
                         afc$targetChunkZ,
                         centerSurfaceY
@@ -217,8 +214,6 @@ public abstract class TFCChunkGeneratorMixin {
         final BlockState stone = Blocks.STONE.defaultBlockState();
         final BlockState water = Blocks.WATER.defaultBlockState();
 
-        final BlockPos.MutableBlockPos mutablePos = new BlockPos.MutableBlockPos();
-
         int landLikeColumns = 0;
         int lowColumns = 0;
         int airBlocks = 0;
@@ -235,28 +230,22 @@ public abstract class TFCChunkGeneratorMixin {
 
         for (int localX = 0; localX < 16; localX++) {
             for (int localZ = 0; localZ < 16; localZ++) {
-                final int worldX = chunk.getPos().getBlockX(localX);
-                final int worldZ = chunk.getPos().getBlockZ(localZ);
-
                 for (int y = minY; y <= oceanCrustTopY; y++) {
-                    mutablePos.set(worldX, y, worldZ);
-
                     if (y == minY) {
-                        chunk.setBlockState(mutablePos, bedrock, false);
+                        setBlockStateUnlocked(chunk, localX, y, localZ, bedrock);
                     } else {
-                        chunk.setBlockState(mutablePos, stone, false);
+                        setBlockStateUnlocked(chunk, localX, y, localZ, stone);
                     }
 
                     crustBlocks++;
                 }
 
                 for (int y = oceanCrustTopY + 1; y <= GLOBAL_OCEAN_TOP_Y; y++) {
-                    mutablePos.set(worldX, y, worldZ);
-                    chunk.setBlockState(mutablePos, water, false);
+                    setBlockStateUnlocked(chunk, localX, y, localZ, water);
                     waterBlocks++;
                 }
 
-                final int surfaceY = findTopNonAirY(chunk, worldX, worldZ, minY, maxY);
+                final int surfaceY = findTopNonAirY(chunk, localX, localZ, minY, maxY);
 
                 minSurfaceY = Math.min(minSurfaceY, surfaceY);
                 maxSurfaceY = Math.max(maxSurfaceY, surfaceY);
@@ -267,15 +256,16 @@ public abstract class TFCChunkGeneratorMixin {
                     final int carveTopY = clamp(surfaceY + 6, GLOBAL_OCEAN_TOP_Y + 1, maxY);
 
                     for (int y = GLOBAL_OCEAN_TOP_Y + 1; y <= carveTopY; y++) {
-                        mutablePos.set(worldX, y, worldZ);
-
-                        if (!chunk.getBlockState(mutablePos).isAir()) {
-                            chunk.setBlockState(mutablePos, air, false);
+                        if (!getBlockStateUnlocked(chunk, localX, y, localZ).isAir()) {
+                            setBlockStateUnlocked(chunk, localX, y, localZ, air);
                             airBlocks++;
                         }
                     }
                 } else {
                     landLikeColumns++;
+
+                    final int worldX = chunk.getPos().getBlockX(localX);
+                    final int worldZ = chunk.getPos().getBlockZ(localZ);
 
                     final int thickness = computeColumnThickness(worldX, worldZ);
                     final int undersideY = clamp(surfaceY - thickness, GLOBAL_OCEAN_TOP_Y + 8, maxY - 1);
@@ -289,10 +279,8 @@ public abstract class TFCChunkGeneratorMixin {
                     }
 
                     for (int y = GLOBAL_OCEAN_TOP_Y + 1; y <= carveTopY; y++) {
-                        mutablePos.set(worldX, y, worldZ);
-
-                        if (!chunk.getBlockState(mutablePos).isAir()) {
-                            chunk.setBlockState(mutablePos, air, false);
+                        if (!getBlockStateUnlocked(chunk, localX, y, localZ).isAir()) {
+                            setBlockStateUnlocked(chunk, localX, y, localZ, air);
                             airBlocks++;
                         }
                     }
@@ -310,7 +298,7 @@ public abstract class TFCChunkGeneratorMixin {
         }
 
         AerofirmacraftTerrain.LOGGER.info(
-                "AFC locked v2: applied index={} chunkX={} chunkZ={} targetChunkX={} targetChunkZ={} centerX={} centerZ={} landLikeColumns={} lowColumns={} airBlocks={} crustBlocks={} waterBlocks={} surfaceY={}..{} undersideY={}..{} oceanCrustTopY={} oceanTopY={} centerSurfaceY={} centerUndersideY={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' oceanTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
+                "AFC locked v3: applied index={} chunkX={} chunkZ={} targetChunkX={} targetChunkZ={} centerX={} centerZ={} landLikeColumns={} lowColumns={} airBlocks={} crustBlocks={} waterBlocks={} surfaceY={}..{} undersideY={}..{} oceanCrustTopY={} oceanTopY={} centerSurfaceY={} centerUndersideY={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' oceanTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
                 transformIndex,
                 chunk.getPos().x,
                 chunk.getPos().z,
@@ -345,12 +333,33 @@ public abstract class TFCChunkGeneratorMixin {
         );
     }
 
+    private static BlockState getBlockStateUnlocked(
+            final ChunkAccess chunk,
+            final int localX,
+            final int y,
+            final int localZ
+    ) {
+        final LevelChunkSection section = chunk.getSection(chunk.getSectionIndex(y));
+        return section.getBlockState(localX & 15, y & 15, localZ & 15);
+    }
+
+    private static void setBlockStateUnlocked(
+            final ChunkAccess chunk,
+            final int localX,
+            final int y,
+            final int localZ,
+            final BlockState state
+    ) {
+        final LevelChunkSection section = chunk.getSection(chunk.getSectionIndex(y));
+        section.setBlockState(localX & 15, y & 15, localZ & 15, state, false);
+    }
+
     private static void logSkip(final ChunkAccess chunk, final int centerSurfaceY, final String reason) {
         final int skip = AFC_SKIP_COUNT.incrementAndGet();
 
         if (skip <= SKIP_LOG_LIMIT) {
             AerofirmacraftTerrain.LOGGER.info(
-                    "AFC locked v2: skipped chunkX={} chunkZ={} centerSurfaceY={} reason={}",
+                    "AFC locked v3: skipped chunkX={} chunkZ={} centerSurfaceY={} reason={}",
                     chunk.getPos().x,
                     chunk.getPos().z,
                     centerSurfaceY,
@@ -358,24 +367,20 @@ public abstract class TFCChunkGeneratorMixin {
             );
         } else if (skip == SKIP_LOG_LIMIT + 1) {
             AerofirmacraftTerrain.LOGGER.info(
-                    "AFC locked v2: skip log limit reached. Further skip logs suppressed."
+                    "AFC locked v3: skip log limit reached. Further skip logs suppressed."
             );
         }
     }
 
     private static int findTopNonAirY(
             final ChunkAccess chunk,
-            final int worldX,
-            final int worldZ,
+            final int localX,
+            final int localZ,
             final int minY,
             final int maxY
     ) {
-        final BlockPos.MutableBlockPos mutablePos = new BlockPos.MutableBlockPos();
-
         for (int y = maxY; y >= minY; y--) {
-            mutablePos.set(worldX, y, worldZ);
-
-            if (!chunk.getBlockState(mutablePos).isAir()) {
+            if (!getBlockStateUnlocked(chunk, localX, y, localZ).isAir()) {
                 return y;
             }
         }

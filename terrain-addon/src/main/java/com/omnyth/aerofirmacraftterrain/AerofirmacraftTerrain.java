@@ -14,10 +14,10 @@ public final class AerofirmacraftTerrain {
     public AerofirmacraftTerrain(IEventBus modEventBus) {
         modEventBus.addListener(this::commonSetup);
 
-        LOGGER.info("Aerofirmacraft Terrain constructed. 9x9 ocean future-chain locked v2 prototype active.");
+        LOGGER.info("Aerofirmacraft Terrain constructed. 9x9 ocean future-chain locked v3 prototype active.");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        LOGGER.info("Aerofirmacraft Terrain common setup complete. Locked v2 acquires sections before all chunk reads/writes.");
+        LOGGER.info("Aerofirmacraft Terrain common setup complete. Locked v3 uses LevelChunkSection direct reads/writes.");
     }
 }

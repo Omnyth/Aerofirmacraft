@@ -323,3 +323,15 @@ Changes:
 - add lock attempt/acquired/released logs
 - wrap transform in try/catch for visible latest.log failures
 - keep bounded 9x9 future-chain transform
+
+## Current branch: terrain-tfc-noise-9x9-ocean-future-chain-locked-v3
+
+Goal:
+Fix locked V2 hanging after section locks were acquired.
+
+Changes:
+- keep future-chain RETURN injection
+- keep LevelChunkSection acquire/release
+- replace ChunkAccess get/set block state calls with direct LevelChunkSection get/set calls
+- keep bounded 9x9 ocean transform
+- keep low-only underside fallback
