@@ -1,7 +1,10 @@
 package com.omnyth.aerofirmacraftterrain.mixin;
 
 import com.omnyth.aerofirmacraftterrain.AerofirmacraftTerrain;
+import net.minecraft.core.Holder;
+import net.minecraft.core.QuartPos;
 import net.minecraft.world.level.StructureManager;
+import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
@@ -23,20 +26,15 @@ import java.util.concurrent.atomic.AtomicLong;
 @Mixin(targets = "net.dries007.tfc.world.TFCChunkGenerator", remap = false)
 public abstract class TFCChunkGeneratorMixin {
     private static final int GLOBAL_OCEAN_TOP_Y = 0;
-    private static final int LAND_TRIGGER_SURFACE_Y = 66;
 
     private static final int BASE_LAND_MASS_THICKNESS = 44;
     private static final int THICKNESS_VARIATION = 10;
 
     private static final int OCEAN_CRUST_THICKNESS = 8;
 
-    // River/lake preservation heuristic.
-    private static final int RIVER_LOW_MIN_Y = 58;
-    private static final int RIVER_LOW_MAX_Y = 65;
-    private static final int RIVER_NEIGHBOR_RADIUS = 5;
-    private static final int RIVER_CARDINAL_HALF_WIDTH = 2;
-    private static final int RIVER_MIN_NEARBY_LAND_OPPOSITE = 8;
-    private static final int RIVER_MIN_NEARBY_LAND_SURROUNDED = 12;
+    private static final int SKY_GAP_NONE = 0;
+    private static final int SKY_GAP_DEFINITE_OCEAN = 1;
+    private static final int SKY_GAP_COASTAL_EDGE = 2;
 
     private static final int DETAILED_LOG_LIMIT = 16;
     private static final int SUMMARY_LOG_INTERVAL = 128;
@@ -46,12 +44,13 @@ public abstract class TFCChunkGeneratorMixin {
     private static final AtomicLong AFC_TOTAL_AIR_BLOCKS = new AtomicLong();
     private static final AtomicLong AFC_TOTAL_CRUST_BLOCKS = new AtomicLong();
     private static final AtomicLong AFC_TOTAL_WATER_BLOCKS = new AtomicLong();
-    private static final AtomicLong AFC_TOTAL_LAND_COLUMNS = new AtomicLong();
-    private static final AtomicLong AFC_TOTAL_PRESERVED_LOW_COLUMNS = new AtomicLong();
-    private static final AtomicLong AFC_TOTAL_SKY_GAP_COLUMNS = new AtomicLong();
+
+    private static final AtomicLong AFC_TOTAL_PRESERVED_COLUMNS = new AtomicLong();
+    private static final AtomicLong AFC_TOTAL_DEFINITE_OCEAN_SKY_GAP_COLUMNS = new AtomicLong();
+    private static final AtomicLong AFC_TOTAL_COASTAL_SKY_GAP_COLUMNS = new AtomicLong();
 
     @Inject(method = "fillFromNoise", at = @At("RETURN"), cancellable = true)
-    private void afc$continuousOceanLockedV4RiverPreserve(
+    private void afc$continuousOceanLockedV6OceanBiomeSkygap(
             final Blender blender,
             final RandomState randomState,
             final StructureManager structureManager,
@@ -62,7 +61,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (originalFuture == null) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC continuous locked v4: fillFromNoise returned null future for chunkX={} chunkZ={}",
+                    "AFC continuous locked v6: fillFromNoise returned null future for chunkX={} chunkZ={}",
                     chunk.getPos().x,
                     chunk.getPos().z
             );
@@ -74,7 +73,7 @@ public abstract class TFCChunkGeneratorMixin {
                 applyContinuousTransformLocked(result);
             } catch (Throwable throwable) {
                 AerofirmacraftTerrain.LOGGER.error(
-                        "AFC continuous locked v4: transform failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
+                        "AFC continuous locked v6: transform failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
                         result.getPos().x,
                         result.getPos().z,
                         result.getClass().getName(),
@@ -91,7 +90,7 @@ public abstract class TFCChunkGeneratorMixin {
     private static void applyContinuousTransformLocked(final ChunkAccess chunk) {
         if (!(chunk instanceof ProtoChunk)) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC continuous locked v4: skipped non-ProtoChunk chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
+                    "AFC continuous locked v6: skipped non-ProtoChunk chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
                     chunk.getPos().x,
                     chunk.getPos().z,
                     chunk.getClass().getName(),
@@ -132,12 +131,12 @@ public abstract class TFCChunkGeneratorMixin {
         final BlockState water = Blocks.WATER.defaultBlockState();
 
         final int[][] surfaceMap = new int[16][16];
-        final boolean[][] landLikeMap = new boolean[16][16];
-        final boolean[][] preserveLowMap = new boolean[16][16];
+        final int[][] skyGapClassMap = new int[16][16];
+        final String[][] biomeIdMap = new String[16][16];
 
-        int landLikeColumns = 0;
-        int preservedLowColumns = 0;
-        int skyGapColumns = 0;
+        int preservedColumns = 0;
+        int definiteOceanSkyGapColumns = 0;
+        int coastalSkyGapColumns = 0;
 
         int airBlocks = 0;
         int crustBlocks = 0;
@@ -153,8 +152,9 @@ public abstract class TFCChunkGeneratorMixin {
         final int oceanCrustTopY = minY + OCEAN_CRUST_THICKNESS;
 
         // First pass:
-        // - write the lower ocean/crust
-        // - capture original-ish column surface classification
+        // - create lower ocean/crust
+        // - read original TFC biome identity
+        // - classify only reviewed TFC ocean/coastal biomes as sky gaps
         for (int localX = 0; localX < 16; localX++) {
             for (int localZ = 0; localZ < 16; localZ++) {
                 for (int y = minY; y <= oceanCrustTopY; y++) {
@@ -173,9 +173,12 @@ public abstract class TFCChunkGeneratorMixin {
                 }
 
                 final int surfaceY = findTopNonAirY(chunk, localX, localZ, minY, maxY);
+                final String biomeId = getBiomeIdForColumn(chunk, localX, surfaceY, localZ, minY, maxY);
+                final int skyGapClass = classifySkyGapBiomeId(biomeId);
 
                 surfaceMap[localX][localZ] = surfaceY;
-                landLikeMap[localX][localZ] = surfaceY >= LAND_TRIGGER_SURFACE_Y;
+                biomeIdMap[localX][localZ] = biomeId;
+                skyGapClassMap[localX][localZ] = skyGapClass;
 
                 minSurfaceY = Math.min(minSurfaceY, surfaceY);
                 maxSurfaceY = Math.max(maxSurfaceY, surfaceY);
@@ -187,24 +190,30 @@ public abstract class TFCChunkGeneratorMixin {
         }
 
         // Second pass:
-        // - classify low columns as river/lake-like if surrounded by land
-        for (int localX = 0; localX < 16; localX++) {
-            for (int localZ = 0; localZ < 16; localZ++) {
-                if (!landLikeMap[localX][localZ]) {
-                    preserveLowMap[localX][localZ] = shouldPreserveLowColumn(surfaceMap, landLikeMap, localX, localZ);
-                }
-            }
-        }
-
-        // Third pass:
-        // - carve islands/gaps
-        // - preserve river/lake-like low columns inside landmasses
+        // - sky-gap biomes become air above lower ocean
+        // - everything else stays as floating land/river/lake/pond terrain
         for (int localX = 0; localX < 16; localX++) {
             for (int localZ = 0; localZ < 16; localZ++) {
                 final int surfaceY = surfaceMap[localX][localZ];
+                final int skyGapClass = skyGapClassMap[localX][localZ];
 
-                if (landLikeMap[localX][localZ]) {
-                    landLikeColumns++;
+                if (skyGapClass == SKY_GAP_DEFINITE_OCEAN || skyGapClass == SKY_GAP_COASTAL_EDGE) {
+                    if (skyGapClass == SKY_GAP_DEFINITE_OCEAN) {
+                        definiteOceanSkyGapColumns++;
+                    } else {
+                        coastalSkyGapColumns++;
+                    }
+
+                    final int carveTopY = clamp(surfaceY + 6, GLOBAL_OCEAN_TOP_Y + 1, maxY);
+
+                    for (int y = GLOBAL_OCEAN_TOP_Y + 1; y <= carveTopY; y++) {
+                        if (!getBlockStateUnlocked(chunk, localX, y, localZ).isAir()) {
+                            setBlockStateUnlocked(chunk, localX, y, localZ, air);
+                            airBlocks++;
+                        }
+                    }
+                } else {
+                    preservedColumns++;
 
                     final int worldX = chunk.getPos().getBlockX(localX);
                     final int worldZ = chunk.getPos().getBlockZ(localZ);
@@ -219,21 +228,6 @@ public abstract class TFCChunkGeneratorMixin {
                     if (localX == 8 && localZ == 8) {
                         centerUndersideY = undersideY;
                     }
-
-                    for (int y = GLOBAL_OCEAN_TOP_Y + 1; y <= carveTopY; y++) {
-                        if (!getBlockStateUnlocked(chunk, localX, y, localZ).isAir()) {
-                            setBlockStateUnlocked(chunk, localX, y, localZ, air);
-                            airBlocks++;
-                        }
-                    }
-                } else if (preserveLowMap[localX][localZ]) {
-                    preservedLowColumns++;
-                    // Preserve river/lake-like terrain columns inside landmasses.
-                    // This keeps TFC surface water and riverbed support instead of carving them into sky gaps.
-                } else {
-                    skyGapColumns++;
-
-                    final int carveTopY = clamp(surfaceY + 6, GLOBAL_OCEAN_TOP_Y + 1, maxY);
 
                     for (int y = GLOBAL_OCEAN_TOP_Y + 1; y <= carveTopY; y++) {
                         if (!getBlockStateUnlocked(chunk, localX, y, localZ).isAir()) {
@@ -258,24 +252,27 @@ public abstract class TFCChunkGeneratorMixin {
             centerSurfaceY = minSurfaceY;
         }
 
+        final String centerBiomeId = biomeIdMap[8][8];
+
         AFC_TOTAL_AIR_BLOCKS.addAndGet(airBlocks);
         AFC_TOTAL_CRUST_BLOCKS.addAndGet(crustBlocks);
         AFC_TOTAL_WATER_BLOCKS.addAndGet(waterBlocks);
-        AFC_TOTAL_LAND_COLUMNS.addAndGet(landLikeColumns);
-        AFC_TOTAL_PRESERVED_LOW_COLUMNS.addAndGet(preservedLowColumns);
-        AFC_TOTAL_SKY_GAP_COLUMNS.addAndGet(skyGapColumns);
+        AFC_TOTAL_PRESERVED_COLUMNS.addAndGet(preservedColumns);
+        AFC_TOTAL_DEFINITE_OCEAN_SKY_GAP_COLUMNS.addAndGet(definiteOceanSkyGapColumns);
+        AFC_TOTAL_COASTAL_SKY_GAP_COLUMNS.addAndGet(coastalSkyGapColumns);
 
         if (transformIndex <= DETAILED_LOG_LIMIT) {
             AerofirmacraftTerrain.LOGGER.info(
-                    "AFC continuous locked v4: applied index={} chunkX={} chunkZ={} centerX={} centerZ={} landLikeColumns={} preservedLowColumns={} skyGapColumns={} airBlocks={} crustBlocks={} waterBlocks={} surfaceY={}..{} undersideY={}..{} oceanCrustTopY={} oceanTopY={} centerSurfaceY={} centerUndersideY={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' oceanTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
+                    "AFC continuous locked v6: applied index={} chunkX={} chunkZ={} centerX={} centerZ={} centerBiome={} preservedColumns={} definiteOceanSkyGapColumns={} coastalSkyGapColumns={} airBlocks={} crustBlocks={} waterBlocks={} surfaceY={}..{} undersideY={}..{} oceanCrustTopY={} oceanTopY={} centerSurfaceY={} centerUndersideY={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' oceanTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
                     transformIndex,
                     chunk.getPos().x,
                     chunk.getPos().z,
                     centerWorldX,
                     centerWorldZ,
-                    landLikeColumns,
-                    preservedLowColumns,
-                    skyGapColumns,
+                    centerBiomeId,
+                    preservedColumns,
+                    definiteOceanSkyGapColumns,
+                    coastalSkyGapColumns,
                     airBlocks,
                     crustBlocks,
                     waterBlocks,
@@ -301,13 +298,13 @@ public abstract class TFCChunkGeneratorMixin {
             );
         } else if (transformIndex % SUMMARY_LOG_INTERVAL == 0) {
             AerofirmacraftTerrain.LOGGER.info(
-                    "AFC continuous locked v4 summary: chunks={} latestChunkX={} latestChunkZ={} totalLandColumns={} totalPreservedLowColumns={} totalSkyGapColumns={} totalAirBlocks={} totalCrustBlocks={} totalWaterBlocks={} latestStatus={}",
+                    "AFC continuous locked v6 summary: chunks={} latestChunkX={} latestChunkZ={} totalPreservedColumns={} totalDefiniteOceanSkyGapColumns={} totalCoastalSkyGapColumns={} totalAirBlocks={} totalCrustBlocks={} totalWaterBlocks={} latestStatus={}",
                     transformIndex,
                     chunk.getPos().x,
                     chunk.getPos().z,
-                    AFC_TOTAL_LAND_COLUMNS.get(),
-                    AFC_TOTAL_PRESERVED_LOW_COLUMNS.get(),
-                    AFC_TOTAL_SKY_GAP_COLUMNS.get(),
+                    AFC_TOTAL_PRESERVED_COLUMNS.get(),
+                    AFC_TOTAL_DEFINITE_OCEAN_SKY_GAP_COLUMNS.get(),
+                    AFC_TOTAL_COASTAL_SKY_GAP_COLUMNS.get(),
                     AFC_TOTAL_AIR_BLOCKS.get(),
                     AFC_TOTAL_CRUST_BLOCKS.get(),
                     AFC_TOTAL_WATER_BLOCKS.get(),
@@ -316,72 +313,61 @@ public abstract class TFCChunkGeneratorMixin {
         }
     }
 
-    private static boolean shouldPreserveLowColumn(
-            final int[][] surfaceMap,
-            final boolean[][] landLikeMap,
+    private static int classifySkyGapBiomeId(final String biomeId) {
+        return switch (biomeId) {
+            // Definite old-ocean water biomes.
+            case "tfc:ocean",
+                 "tfc:ocean_reef",
+                 "tfc:deep_ocean",
+                 "tfc:deep_ocean_trench" -> SKY_GAP_DEFINITE_OCEAN;
+
+            // Reviewed TFC coastal/ocean-edge biomes from #tfc:is_ocean.
+            // These are separated from definite ocean for tuning.
+            case "tfc:embayments",
+                 "tfc:shore",
+                 "tfc:tidal_flats",
+                 "tfc:sea_stacks",
+                 "tfc:terrace_upper",
+                 "tfc:terrace_lower",
+                 "tfc:setback_cliffs",
+                 "tfc:coastal_dunes",
+                 "tfc:rocky_shores",
+                 "tfc:shield_volcano_shore",
+                 "tfc:old_shield_volcano_shore",
+                 "tfc:ice_sheet_oceanic",
+                 "tfc:ice_sheet_shore" -> SKY_GAP_COASTAL_EDGE;
+
+            // Everything else is preserved, including:
+            // tfc:river
+            // tfc:lake and all lake variants
+            // tfc:dune_sea
+            // tfc:oceanic_mountains and oceanic mountain/lake variants
+            // tfc:volcanic_oceanic_mountains and volcanic oceanic mountain/lake variants
+            // tfc:glaciated_oceanic_mountains and carved oceanic mountain variants
+            default -> SKY_GAP_NONE;
+        };
+    }
+
+    private static String getBiomeIdForColumn(
+            final ChunkAccess chunk,
             final int localX,
-            final int localZ
+            final int surfaceY,
+            final int localZ,
+            final int minY,
+            final int maxY
     ) {
-        final int surfaceY = surfaceMap[localX][localZ];
+        final int sampleY = clamp(surfaceY, minY, maxY);
+        final LevelChunkSection section = chunk.getSection(chunk.getSectionIndex(sampleY));
 
-        if (surfaceY < RIVER_LOW_MIN_Y || surfaceY > RIVER_LOW_MAX_Y) {
-            return false;
-        }
+        final int quartLocalX = (localX >> 2) & 3;
+        final int quartLocalY = QuartPos.fromBlock(sampleY) & 3;
+        final int quartLocalZ = (localZ >> 2) & 3;
 
-        int nearbyLand = 0;
+        final Holder<Biome> biomeHolder = section.getNoiseBiome(quartLocalX, quartLocalY, quartLocalZ);
 
-        boolean north = false;
-        boolean south = false;
-        boolean west = false;
-        boolean east = false;
-
-        for (int dx = -RIVER_NEIGHBOR_RADIUS; dx <= RIVER_NEIGHBOR_RADIUS; dx++) {
-            for (int dz = -RIVER_NEIGHBOR_RADIUS; dz <= RIVER_NEIGHBOR_RADIUS; dz++) {
-                if (dx == 0 && dz == 0) {
-                    continue;
-                }
-
-                final int nx = localX + dx;
-                final int nz = localZ + dz;
-
-                if (nx < 0 || nx >= 16 || nz < 0 || nz >= 16) {
-                    continue;
-                }
-
-                if (!landLikeMap[nx][nz]) {
-                    continue;
-                }
-
-                nearbyLand++;
-
-                if (dz < 0 && Math.abs(dx) <= RIVER_CARDINAL_HALF_WIDTH) {
-                    north = true;
-                }
-
-                if (dz > 0 && Math.abs(dx) <= RIVER_CARDINAL_HALF_WIDTH) {
-                    south = true;
-                }
-
-                if (dx < 0 && Math.abs(dz) <= RIVER_CARDINAL_HALF_WIDTH) {
-                    west = true;
-                }
-
-                if (dx > 0 && Math.abs(dz) <= RIVER_CARDINAL_HALF_WIDTH) {
-                    east = true;
-                }
-            }
-        }
-
-        final boolean oppositeBanks = (north && south) || (west && east);
-
-        int directionCount = 0;
-        if (north) directionCount++;
-        if (south) directionCount++;
-        if (west) directionCount++;
-        if (east) directionCount++;
-
-        return (oppositeBanks && nearbyLand >= RIVER_MIN_NEARBY_LAND_OPPOSITE)
-                || (directionCount >= 3 && nearbyLand >= RIVER_MIN_NEARBY_LAND_SURROUNDED);
+        return biomeHolder.unwrapKey()
+                .map(key -> key.location().toString())
+                .orElse("unknown");
     }
 
     private static BlockState getBlockStateUnlocked(

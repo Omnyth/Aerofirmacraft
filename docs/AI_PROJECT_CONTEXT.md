@@ -360,3 +360,15 @@ Changes:
 - preserve low columns that appear surrounded by land/opposite banks
 - carve only low columns classified as broad sky-gap/ocean
 - log landLikeColumns, preservedLowColumns, and skyGapColumns separately
+
+## Current branch: terrain-tfc-noise-continuous-ocean-locked-v6-ocean-biome-skygap
+
+Goal:
+Classify sky gaps using reviewed TFC biome IDs, not height or name substring matching.
+
+Changes:
+- preserve all non-reviewed-ocean biomes
+- carve definite old-ocean biomes as sky gaps
+- carve reviewed coastal/ocean-edge biomes as separate sky-gap category
+- preserve tfc:river, all lake variants, dune_sea, oceanic_mountains, and oceanic mountain/lake variants
+- log definiteOceanSkyGapColumns and coastalSkyGapColumns separately

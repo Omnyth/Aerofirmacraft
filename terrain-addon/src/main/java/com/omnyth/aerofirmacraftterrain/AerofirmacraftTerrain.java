@@ -14,10 +14,10 @@ public final class AerofirmacraftTerrain {
     public AerofirmacraftTerrain(IEventBus modEventBus) {
         modEventBus.addListener(this::commonSetup);
 
-        LOGGER.info("Aerofirmacraft Terrain constructed. Continuous ocean locked v4 river-preserve prototype active.");
+        LOGGER.info("Aerofirmacraft Terrain constructed. Continuous ocean locked v6 ocean-biome skygap prototype active.");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        LOGGER.info("Aerofirmacraft Terrain common setup complete. Continuous transform now preserves river-like low columns.");
+        LOGGER.info("Aerofirmacraft Terrain common setup complete. V6 carves sky gaps only from reviewed TFC ocean/coastal biomes.");
     }
 }
