@@ -234,3 +234,15 @@ Design:
 - no block/fluid registry lookups
 - no serverLevel.setBlock
 - no ChunkEvent.Load
+
+## Current branch: terrain-tfc-noise-3x3-region-transform-v2
+
+Goal:
+Apply the V1 fixes while moving forward.
+
+Changes:
+- target center is still selected by first height-valid chunk
+- once target is selected, all chunks inside the target 3x3 can transform
+- low/shore chunks inside the selected target region are no longer skipped just because their center surface is low
+- transform numbering is fixed with AtomicInteger
+- skip log spam is reduced
