@@ -9,6 +9,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.StructureManager;
+import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -21,6 +22,7 @@ import net.minecraft.world.level.levelgen.blending.Blender;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.HashSet;
@@ -42,10 +44,6 @@ public abstract class TFCChunkGeneratorMixin {
             ResourceLocation.fromNamespaceAndPath("tfc", "ocean")
     );
 
-    // V15 world model:
-    // - Dimension minY should be -128.
-    // - TFC keeps its old generation space from Y=-64 upward.
-    // - AFC owns the new band below old TFC minY.
     private static final int EXPECTED_DIMENSION_MIN_Y = -128;
     private static final int OLD_TFC_MIN_Y = -64;
     private static final int LOWER_OCEAN_TOP_Y = OLD_TFC_MIN_Y - 1;
@@ -64,20 +62,22 @@ public abstract class TFCChunkGeneratorMixin {
     private static final int SUMMARY_LOG_INTERVAL = 512;
 
     private static final AtomicBoolean AFC_DIMENSION_SANITY_LOGGED = new AtomicBoolean(false);
-    private static final AtomicInteger AFC_TRANSFORM_COUNT = new AtomicInteger();
 
-    private static final AtomicLong AFC_TOTAL_AIR_BLOCKS = new AtomicLong();
-    private static final AtomicLong AFC_TOTAL_CRUST_BLOCKS = new AtomicLong();
-    private static final AtomicLong AFC_TOTAL_WATER_BLOCKS = new AtomicLong();
+    private static final AtomicInteger AFC_LOWER_FILL_COUNT = new AtomicInteger();
+    private static final AtomicInteger AFC_SURFACE_TRANSFORM_COUNT = new AtomicInteger();
 
+    private static final AtomicLong AFC_TOTAL_LOWER_CRUST_BLOCKS = new AtomicLong();
+    private static final AtomicLong AFC_TOTAL_LOWER_WATER_BLOCKS = new AtomicLong();
+    private static final AtomicLong AFC_TOTAL_TFC_OCEAN_BIOME_CELLS = new AtomicLong();
+
+    private static final AtomicLong AFC_TOTAL_SURFACE_AIR_BLOCKS = new AtomicLong();
     private static final AtomicLong AFC_TOTAL_PRESERVED_COLUMNS = new AtomicLong();
     private static final AtomicLong AFC_TOTAL_DEFINITE_OCEAN_SKY_GAP_COLUMNS = new AtomicLong();
     private static final AtomicLong AFC_TOTAL_COASTAL_SKY_GAP_COLUMNS = new AtomicLong();
     private static final AtomicLong AFC_TOTAL_SKY_GAP_BIOME_CELLS = new AtomicLong();
-    private static final AtomicLong AFC_TOTAL_TFC_OCEAN_BIOME_CELLS = new AtomicLong();
 
     @Inject(method = "fillFromNoise", at = @At("RETURN"), cancellable = true)
-    private void afc$extendedMinYLowerOceanV15(
+    private void afc$fillLowerOceanOnlyV16(
             final Blender blender,
             final RandomState randomState,
             final StructureManager structureManager,
@@ -88,7 +88,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (originalFuture == null) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC v15: fillFromNoise returned null future for chunkX={} chunkZ={}",
+                    "AFC v16 lower: fillFromNoise returned null future for chunkX={} chunkZ={}",
                     chunk.getPos().x,
                     chunk.getPos().z
             );
@@ -98,13 +98,12 @@ public abstract class TFCChunkGeneratorMixin {
         cir.setReturnValue(originalFuture.thenApply(result -> {
             try {
                 final Registry<Biome> biomeRegistry = structureManager.registryAccess().registryOrThrow(Registries.BIOME);
-                final Holder<Biome> skyGapBiome = biomeRegistry.getHolderOrThrow(SKY_GAP_BIOME_KEY);
                 final Holder<Biome> tfcOceanBiome = biomeRegistry.getHolderOrThrow(TFC_OCEAN_BIOME_KEY);
 
-                applyTransformLocked(result, skyGapBiome, tfcOceanBiome);
+                fillLowerOceanLocked(result, tfcOceanBiome);
             } catch (Throwable throwable) {
                 AerofirmacraftTerrain.LOGGER.error(
-                        "AFC v15: transform failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
+                        "AFC v16 lower: lower-ocean fill failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
                         result.getPos().x,
                         result.getPos().z,
                         result.getClass().getName(),
@@ -118,19 +117,36 @@ public abstract class TFCChunkGeneratorMixin {
         }));
     }
 
-    private static void applyTransformLocked(
+    @Inject(method = "applyBiomeDecoration", at = @At("RETURN"))
+    private void afc$deferredSurfaceTransformV16(
+            final WorldGenLevel level,
             final ChunkAccess chunk,
-            final Holder<Biome> skyGapBiome,
-            final Holder<Biome> tfcOceanBiome
+            final StructureManager structureManager,
+            final CallbackInfo ci
     ) {
-        if (!(chunk instanceof ProtoChunk)) {
-            AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC v15: skipped non-ProtoChunk chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
+        try {
+            final Registry<Biome> biomeRegistry = level.registryAccess().registryOrThrow(Registries.BIOME);
+            final Holder<Biome> skyGapBiome = biomeRegistry.getHolderOrThrow(SKY_GAP_BIOME_KEY);
+
+            transformSurfaceAfterFeaturesLocked(chunk, skyGapBiome);
+        } catch (Throwable throwable) {
+            AerofirmacraftTerrain.LOGGER.error(
+                    "AFC v16 surface: deferred transform failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
                     chunk.getPos().x,
                     chunk.getPos().z,
                     chunk.getClass().getName(),
-                    chunk.getPersistedStatus()
+                    chunk.getPersistedStatus(),
+                    throwable
             );
+            throw throwable;
+        }
+    }
+
+    private static void fillLowerOceanLocked(
+            final ChunkAccess chunk,
+            final Holder<Biome> tfcOceanBiome
+    ) {
+        if (!(chunk instanceof ProtoChunk)) {
             return;
         }
 
@@ -142,7 +158,7 @@ public abstract class TFCChunkGeneratorMixin {
         }
 
         try {
-            applyTransformUnlocked(chunk, skyGapBiome, tfcOceanBiome);
+            fillLowerOceanUnlocked(chunk, tfcOceanBiome);
             chunk.setUnsaved(true);
         } finally {
             for (LevelChunkSection section : lockedSections) {
@@ -151,21 +167,45 @@ public abstract class TFCChunkGeneratorMixin {
         }
     }
 
-    private static void applyTransformUnlocked(
+    private static void transformSurfaceAfterFeaturesLocked(
             final ChunkAccess chunk,
-            final Holder<Biome> skyGapBiome,
+            final Holder<Biome> skyGapBiome
+    ) {
+        if (!(chunk instanceof ProtoChunk)) {
+            return;
+        }
+
+        final Set<LevelChunkSection> lockedSections = new HashSet<>();
+
+        for (LevelChunkSection section : chunk.getSections()) {
+            section.acquire();
+            lockedSections.add(section);
+        }
+
+        try {
+            transformSurfaceAfterFeaturesUnlocked(chunk, skyGapBiome);
+            chunk.setUnsaved(true);
+        } finally {
+            for (LevelChunkSection section : lockedSections) {
+                section.release();
+            }
+        }
+    }
+
+    private static void fillLowerOceanUnlocked(
+            final ChunkAccess chunk,
             final Holder<Biome> tfcOceanBiome
     ) {
-        final int transformIndex = AFC_TRANSFORM_COUNT.incrementAndGet();
+        final int index = AFC_LOWER_FILL_COUNT.incrementAndGet();
 
         final int minY = chunk.getHeightAccessorForGeneration().getMinBuildHeight();
         final int maxY = chunk.getHeightAccessorForGeneration().getMaxBuildHeight() - 1;
-        final boolean extendedLowerBandAvailable = minY <= LOWER_OCEAN_TOP_Y;
+        final boolean lowerBandAvailable = minY <= LOWER_OCEAN_TOP_Y;
 
         if (AFC_DIMENSION_SANITY_LOGGED.compareAndSet(false, true)) {
             if (minY != EXPECTED_DIMENSION_MIN_Y) {
                 AerofirmacraftTerrain.LOGGER.warn(
-                        "AFC v15 dimension sanity: expected minY={} but got minY={}. Lower ocean band may not be available. maxY={} lowerOceanTopY={}",
+                        "AFC v16 dimension sanity: expected minY={} but got minY={}. maxY={} lowerOceanTopY={}",
                         EXPECTED_DIMENSION_MIN_Y,
                         minY,
                         maxY,
@@ -173,7 +213,7 @@ public abstract class TFCChunkGeneratorMixin {
                 );
             } else {
                 AerofirmacraftTerrain.LOGGER.info(
-                        "AFC v15 dimension sanity passed: minY={} maxY={} lowerOceanTopY={} oldTfcMinY={}",
+                        "AFC v16 dimension sanity passed: minY={} maxY={} lowerOceanTopY={} oldTfcMinY={}",
                         minY,
                         maxY,
                         LOWER_OCEAN_TOP_Y,
@@ -182,44 +222,19 @@ public abstract class TFCChunkGeneratorMixin {
             }
         }
 
-        final int centerWorldX = chunk.getPos().getBlockX(8);
-        final int centerWorldZ = chunk.getPos().getBlockZ(8);
-
-        final BlockState air = Blocks.AIR.defaultBlockState();
         final BlockState bedrock = Blocks.BEDROCK.defaultBlockState();
         final BlockState stone = Blocks.STONE.defaultBlockState();
         final BlockState water = Blocks.WATER.defaultBlockState();
 
-        final int[][] surfaceMap = new int[16][16];
-        final int[][] skyGapClassMap = new int[16][16];
-        final String[][] biomeIdMap = new String[16][16];
-
-        int preservedColumns = 0;
-        int definiteOceanSkyGapColumns = 0;
-        int coastalSkyGapColumns = 0;
-
-        int skyGapBiomeCells = 0;
-        int tfcOceanBiomeCells = 0;
-
-        int airBlocks = 0;
         int crustBlocks = 0;
         int waterBlocks = 0;
-
-        int minSurfaceY = Integer.MAX_VALUE;
-        int maxSurfaceY = Integer.MIN_VALUE;
-        int minUndersideY = Integer.MAX_VALUE;
-        int maxUndersideY = Integer.MIN_VALUE;
-        int centerSurfaceY = Integer.MIN_VALUE;
-        int centerUndersideY = Integer.MIN_VALUE;
 
         final int crustTopY = minY + LOWER_BEDROCK_LEVELS + LOWER_CRUST_LEVELS - 1;
         final int lowerOceanTopY = Math.min(LOWER_OCEAN_TOP_Y, maxY);
 
-        // Pass 1:
-        // Fill only the newly added AFC-owned lower band and classify columns from original TFC surface biomes.
-        for (int localX = 0; localX < 16; localX++) {
-            for (int localZ = 0; localZ < 16; localZ++) {
-                if (extendedLowerBandAvailable) {
+        if (lowerBandAvailable) {
+            for (int localX = 0; localX < 16; localX++) {
+                for (int localZ = 0; localZ < 16; localZ++) {
                     for (int y = minY; y <= lowerOceanTopY; y++) {
                         if (y == minY) {
                             setBlockStateUnlocked(chunk, localX, y, localZ, bedrock);
@@ -233,8 +248,68 @@ public abstract class TFCChunkGeneratorMixin {
                         }
                     }
                 }
+            }
+        }
 
-                final int surfaceY = findTopNonAirY(chunk, localX, localZ, minY, maxY);
+        final int tfcOceanBiomeCells = assignTfcOceanBiomeCellsUnlocked(chunk, tfcOceanBiome, minY, maxY);
+
+        AFC_TOTAL_LOWER_CRUST_BLOCKS.addAndGet(crustBlocks);
+        AFC_TOTAL_LOWER_WATER_BLOCKS.addAndGet(waterBlocks);
+        AFC_TOTAL_TFC_OCEAN_BIOME_CELLS.addAndGet(tfcOceanBiomeCells);
+
+        if (index <= DETAILED_LOG_LIMIT || index % SUMMARY_LOG_INTERVAL == 0) {
+            AerofirmacraftTerrain.LOGGER.info(
+                    "AFC v16 lower: index={} chunkX={} chunkZ={} minY={} lowerBand={} crustBlocks={} waterBlocks={} tfcOceanBiomeCells={} totalsCrust={} totalsWater={} totalsTfcOceanBiomeCells={} status={}",
+                    index,
+                    chunk.getPos().x,
+                    chunk.getPos().z,
+                    minY,
+                    lowerBandAvailable,
+                    crustBlocks,
+                    waterBlocks,
+                    tfcOceanBiomeCells,
+                    AFC_TOTAL_LOWER_CRUST_BLOCKS.get(),
+                    AFC_TOTAL_LOWER_WATER_BLOCKS.get(),
+                    AFC_TOTAL_TFC_OCEAN_BIOME_CELLS.get(),
+                    chunk.getPersistedStatus()
+            );
+        }
+    }
+
+    private static void transformSurfaceAfterFeaturesUnlocked(
+            final ChunkAccess chunk,
+            final Holder<Biome> skyGapBiome
+    ) {
+        final int index = AFC_SURFACE_TRANSFORM_COUNT.incrementAndGet();
+
+        final int minY = chunk.getHeightAccessorForGeneration().getMinBuildHeight();
+        final int maxY = chunk.getHeightAccessorForGeneration().getMaxBuildHeight() - 1;
+
+        final int centerWorldX = chunk.getPos().getBlockX(8);
+        final int centerWorldZ = chunk.getPos().getBlockZ(8);
+
+        final BlockState air = Blocks.AIR.defaultBlockState();
+
+        final int[][] surfaceMap = new int[16][16];
+        final int[][] skyGapClassMap = new int[16][16];
+        final String[][] biomeIdMap = new String[16][16];
+
+        int preservedColumns = 0;
+        int definiteOceanSkyGapColumns = 0;
+        int coastalSkyGapColumns = 0;
+        int skyGapBiomeCells = 0;
+        int airBlocks = 0;
+
+        int minSurfaceY = Integer.MAX_VALUE;
+        int maxSurfaceY = Integer.MIN_VALUE;
+        int minUndersideY = Integer.MAX_VALUE;
+        int maxUndersideY = Integer.MIN_VALUE;
+        int centerSurfaceY = Integer.MIN_VALUE;
+        int centerUndersideY = Integer.MIN_VALUE;
+
+        for (int localX = 0; localX < 16; localX++) {
+            for (int localZ = 0; localZ < 16; localZ++) {
+                final int surfaceY = findTopNonAirY(chunk, localX, localZ, OLD_TFC_MIN_Y, maxY);
                 final String biomeId = getBiomeIdForColumn(chunk, localX, surfaceY, localZ, minY, maxY);
                 final int skyGapClass = classifySkyGapBiomeId(biomeId);
 
@@ -251,12 +326,8 @@ public abstract class TFCChunkGeneratorMixin {
             }
         }
 
-        tfcOceanBiomeCells = assignTfcOceanBiomeCellsUnlocked(chunk, tfcOceanBiome, minY, maxY);
         skyGapBiomeCells = assignSkyGapBiomeCellsUnlocked(chunk, skyGapBiome, skyGapClassMap, minY, maxY);
 
-        // Pass 2:
-        // - Old TFC ocean/coast becomes sky gap above the new lower ocean.
-        // - Preserved land/river/lake becomes floating terrain with a carved underside.
         for (int localX = 0; localX < 16; localX++) {
             for (int localZ = 0; localZ < 16; localZ++) {
                 final int surfaceY = surfaceMap[localX][localZ];
@@ -269,10 +340,9 @@ public abstract class TFCChunkGeneratorMixin {
                         coastalSkyGapColumns++;
                     }
 
-                    final int carveBottomY = Math.max(minY, OLD_TFC_MIN_Y);
-                    final int carveTopY = clamp(surfaceY + 6, carveBottomY, maxY);
+                    final int carveTopY = clamp(surfaceY + 6, OLD_TFC_MIN_Y, maxY);
 
-                    for (int y = carveBottomY; y <= carveTopY; y++) {
+                    for (int y = OLD_TFC_MIN_Y; y <= carveTopY; y++) {
                         if (!getBlockStateUnlocked(chunk, localX, y, localZ).isAir()) {
                             setBlockStateUnlocked(chunk, localX, y, localZ, air);
                             airBlocks++;
@@ -287,7 +357,6 @@ public abstract class TFCChunkGeneratorMixin {
                     final int thickness = computeColumnThickness(worldX, worldZ);
                     final int undersideY = clamp(surfaceY - thickness, OLD_TFC_MIN_Y + 8, maxY - 1);
                     final int carveTopY = undersideY - 1;
-                    final int carveBottomY = Math.max(minY, OLD_TFC_MIN_Y);
 
                     minUndersideY = Math.min(minUndersideY, undersideY);
                     maxUndersideY = Math.max(maxUndersideY, undersideY);
@@ -296,7 +365,7 @@ public abstract class TFCChunkGeneratorMixin {
                         centerUndersideY = undersideY;
                     }
 
-                    for (int y = carveBottomY; y <= carveTopY; y++) {
+                    for (int y = OLD_TFC_MIN_Y; y <= carveTopY; y++) {
                         if (!getBlockStateUnlocked(chunk, localX, y, localZ).isAir()) {
                             setBlockStateUnlocked(chunk, localX, y, localZ, air);
                             airBlocks++;
@@ -321,66 +390,40 @@ public abstract class TFCChunkGeneratorMixin {
 
         final String centerBiomeId = biomeIdMap[8][8];
 
-        AFC_TOTAL_AIR_BLOCKS.addAndGet(airBlocks);
-        AFC_TOTAL_CRUST_BLOCKS.addAndGet(crustBlocks);
-        AFC_TOTAL_WATER_BLOCKS.addAndGet(waterBlocks);
+        AFC_TOTAL_SURFACE_AIR_BLOCKS.addAndGet(airBlocks);
         AFC_TOTAL_PRESERVED_COLUMNS.addAndGet(preservedColumns);
         AFC_TOTAL_DEFINITE_OCEAN_SKY_GAP_COLUMNS.addAndGet(definiteOceanSkyGapColumns);
         AFC_TOTAL_COASTAL_SKY_GAP_COLUMNS.addAndGet(coastalSkyGapColumns);
         AFC_TOTAL_SKY_GAP_BIOME_CELLS.addAndGet(skyGapBiomeCells);
-        AFC_TOTAL_TFC_OCEAN_BIOME_CELLS.addAndGet(tfcOceanBiomeCells);
 
-        if (transformIndex <= DETAILED_LOG_LIMIT) {
+        if (index <= DETAILED_LOG_LIMIT || index % SUMMARY_LOG_INTERVAL == 0) {
             AerofirmacraftTerrain.LOGGER.info(
-                    "AFC v15: applied index={} chunkX={} chunkZ={} minY={} maxY={} lowerBand={} lowerOceanTopY={} centerX={} centerZ={} centerBiome={} preserved={} oceanGap={} coastalGap={} skyGapBiomeCells={} tfcOceanBiomeCells={} airBlocks={} crustBlocks={} waterBlocks={} surfaceY={}..{} undersideY={}..{} centerSurfaceY={} centerUndersideY={} status={} surfaceTp='/tp @s {} {} {}' lowerOceanTp='/tp @s {} {} {}'",
-                    transformIndex,
+                    "AFC v16 surface: index={} chunkX={} chunkZ={} centerBiome={} preserved={} oceanGap={} coastalGap={} skyGapBiomeCells={} airBlocks={} totalPreserved={} totalOceanGap={} totalCoastalGap={} totalSkyGapBiomeCells={} totalAirBlocks={} surfaceY={}..{} undersideY={}..{} status={} surfaceTp='/tp @s {} {} {}' lowerOceanTp='/tp @s {} {} {}'",
+                    index,
                     chunk.getPos().x,
                     chunk.getPos().z,
-                    minY,
-                    maxY,
-                    extendedLowerBandAvailable,
-                    lowerOceanTopY,
-                    centerWorldX,
-                    centerWorldZ,
                     centerBiomeId,
                     preservedColumns,
                     definiteOceanSkyGapColumns,
                     coastalSkyGapColumns,
                     skyGapBiomeCells,
-                    tfcOceanBiomeCells,
                     airBlocks,
-                    crustBlocks,
-                    waterBlocks,
+                    AFC_TOTAL_PRESERVED_COLUMNS.get(),
+                    AFC_TOTAL_DEFINITE_OCEAN_SKY_GAP_COLUMNS.get(),
+                    AFC_TOTAL_COASTAL_SKY_GAP_COLUMNS.get(),
+                    AFC_TOTAL_SKY_GAP_BIOME_CELLS.get(),
+                    AFC_TOTAL_SURFACE_AIR_BLOCKS.get(),
                     minSurfaceY,
                     maxSurfaceY,
                     minUndersideY,
                     maxUndersideY,
-                    centerSurfaceY,
-                    centerUndersideY,
                     chunk.getPersistedStatus(),
                     centerWorldX,
                     centerSurfaceY + 16,
                     centerWorldZ,
                     centerWorldX,
-                    lowerOceanTopY + 4,
+                    LOWER_OCEAN_TOP_Y + 4,
                     centerWorldZ
-            );
-        } else if (transformIndex % SUMMARY_LOG_INTERVAL == 0) {
-            AerofirmacraftTerrain.LOGGER.info(
-                    "AFC v15 summary: chunks={} latestChunkX={} latestChunkZ={} latestMinY={} preserved={} oceanGap={} coastalGap={} skyGapBiomeCells={} tfcOceanBiomeCells={} airBlocks={} crustBlocks={} waterBlocks={} latestStatus={}",
-                    transformIndex,
-                    chunk.getPos().x,
-                    chunk.getPos().z,
-                    minY,
-                    AFC_TOTAL_PRESERVED_COLUMNS.get(),
-                    AFC_TOTAL_DEFINITE_OCEAN_SKY_GAP_COLUMNS.get(),
-                    AFC_TOTAL_COASTAL_SKY_GAP_COLUMNS.get(),
-                    AFC_TOTAL_SKY_GAP_BIOME_CELLS.get(),
-                    AFC_TOTAL_TFC_OCEAN_BIOME_CELLS.get(),
-                    AFC_TOTAL_AIR_BLOCKS.get(),
-                    AFC_TOTAL_CRUST_BLOCKS.get(),
-                    AFC_TOTAL_WATER_BLOCKS.get(),
-                    chunk.getPersistedStatus()
             );
         }
     }

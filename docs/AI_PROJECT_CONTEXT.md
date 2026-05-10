@@ -449,3 +449,16 @@ Changes:
 - reduce detailed logging to first 4 chunks
 - reduce summary logging to every 512 chunks
 - add one-time dimension sanity log
+
+## Current branch: terrain-tfc-extend-min-y-lower-ocean-v16-defer-surface-transform
+
+Goal:
+Prevent feature-stage far-chunk setBlock warnings by deferring surface/island carving until after feature decoration.
+
+Changes:
+- keep overworld min_y=-128 architecture
+- fill only AFC lower ocean band during fillFromNoise
+- assign tfc:ocean to lower ocean biome cells during fillFromNoise
+- move old ocean/coastal sky-gap carving to applyBiomeDecoration RETURN
+- move preserved island underside carving to applyBiomeDecoration RETURN
+- keep sky_gap biome assignment in deferred surface transform
