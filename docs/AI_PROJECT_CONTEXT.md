@@ -530,3 +530,18 @@ Changes:
 - experimental lower_ocean BiomeExtension shifted to BiomeNoise.ocean(seed, -218, -204)
 - aquiferHeightOffset shifted to -216
 - no manual water/stone/bedrock fill
+
+## Current branch: terrain-tfc-real-lower-ocean-biome-v23-lower-noise-hook
+
+Goal:
+Make the lower band use lower_ocean terrain noise, not the upper X/Z column biome noise.
+
+Changes:
+- base from V22
+- keep min_y=-256
+- fix lower_ocean BiomeNoise.ocean offsets to -281..-267, targeting actual Y around -218..-204
+- set aquiferHeightOffset back to -24, matching TFC ocean relative behavior
+- add ChunkNoiseFillerMixin
+- inject calculateNoiseAtHeight for Y=-256..-193
+- return density from lower_ocean BiomeNoiseSampler
+- no manual water/stone/bedrock fill
