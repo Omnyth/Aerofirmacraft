@@ -360,3 +360,15 @@ Changes:
 - preserve low columns that appear surrounded by land/opposite banks
 - carve only low columns classified as broad sky-gap/ocean
 - log landLikeColumns, preservedLowColumns, and skyGapColumns separately
+
+## Current branch: terrain-tfc-noise-continuous-ocean-locked-v5-tfc-river-biome
+
+Goal:
+Preserve TFC river biome columns using generated biome data.
+
+Changes:
+- read LevelChunkSection noise biome palette
+- preserve low columns whose biome key is tfc:river
+- keep fallback local river/lake heuristic
+- preserved low columns keep surface but still get floating underside carving
+- log riverBiomeColumns separately from heuristicPreservedColumns and skyGapColumns
