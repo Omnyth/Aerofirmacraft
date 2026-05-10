@@ -206,3 +206,16 @@ Behavior:
 - carve under land columns
 - carve fluid columns above Y=0
 - mark underside with glowstone
+
+## Current branch: terrain-tfc-noise-land-patch-prototype
+
+Goal:
+Skip ocean-only patches and test an 8x8 floating transform on a land-bearing patch.
+
+Behavior:
+- inspect 8x8 patch during TFC fillFromNoise completion
+- skip until landColumns >= 24
+- mutate one ProtoChunk only
+- carve under land columns
+- carve fluid columns above Y=0
+- mark underside with glowstone
