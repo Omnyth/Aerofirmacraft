@@ -421,3 +421,15 @@ Changes:
 - assign tfc:ocean to biome cells from minY through the Y=0 cell
 - keep sky_gap assignment above Y=0 for carved old-ocean/coastal gaps
 - keep original TFC biomes above Y=0 for preserved islands/rivers/lakes
+
+## Current branch: terrain-tfc-biome-prenoise-only-v12
+
+Goal:
+Test whether pre-noise biome palette assignment alone can move TFC ocean generation to lower Y.
+
+Changes:
+- disable AFC block transform
+- assign existing tfc:ocean below Y=0 during createBiomes
+- let TFC fillFromNoise run normally
+- post-noise probe lowerWaterBlocks/lowerNonAirBlocks and biome identity
+- use this to decide whether to pursue deeper TFC generator hooks
