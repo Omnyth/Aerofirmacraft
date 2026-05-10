@@ -498,3 +498,18 @@ Changes:
 - set noise_settings min_y=-128 while preserving top Y
 - no manual water/stone/bedrock fill
 - no sky-gap/island carving
+
+## Current branch: terrain-tfc-real-lower-ocean-biome-v21b-raw-noise-json
+
+Goal:
+Fix malformed V21 noise settings override by raw-patching vanilla overworld JSON.
+
+Changes:
+- base from V21
+- keep lower_ocean BiomeExtension
+- keep lower Y biome assignment
+- overwrite data/minecraft/worldgen/noise_settings/overworld.json from vanilla source
+- raw-patch first min_y to -128
+- raw-patch first height to preserve original top Y
+- avoid ConvertTo-Json rewrite
+- no manual water/stone/bedrock fill
