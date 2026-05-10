@@ -286,3 +286,16 @@ Changes:
 - still mutate only ProtoChunks at minecraft:noise
 - still avoid block/fluid registry lookups
 - check outside-region status before transform-limit status for better skip logs
+
+## Current branch: terrain-tfc-noise-9x9-ocean-future-chain
+
+Goal:
+Fix the suspected async race by chaining AFC terrain mutation into the returned TFC fillFromNoise future.
+
+Changes:
+- @Inject at RETURN is now cancellable
+- replace whenComplete side-effect with originalFuture.thenApply(...)
+- no pending chunk replay, because replay would mutate chunks after their own futures completed
+- keep 9x9 ocean-floor transform
+- keep ProtoChunk check
+- keep no registry/block-ID lookup
