@@ -36,6 +36,11 @@ public abstract class TFCChunkGeneratorMixin {
             ResourceLocation.fromNamespaceAndPath(AerofirmacraftTerrain.MODID, "sky_gap")
     );
 
+    private static final ResourceKey<Biome> LOWER_OCEAN_BIOME_KEY = ResourceKey.create(
+            Registries.BIOME,
+            ResourceLocation.fromNamespaceAndPath(AerofirmacraftTerrain.MODID, "lower_ocean")
+    );
+
     private static final int GLOBAL_OCEAN_TOP_Y = 0;
 
     private static final int BASE_LAND_MASS_THICKNESS = 44;
@@ -60,9 +65,10 @@ public abstract class TFCChunkGeneratorMixin {
     private static final AtomicLong AFC_TOTAL_DEFINITE_OCEAN_SKY_GAP_COLUMNS = new AtomicLong();
     private static final AtomicLong AFC_TOTAL_COASTAL_SKY_GAP_COLUMNS = new AtomicLong();
     private static final AtomicLong AFC_TOTAL_SKY_GAP_BIOME_CELLS = new AtomicLong();
+    private static final AtomicLong AFC_TOTAL_LOWER_OCEAN_BIOME_CELLS = new AtomicLong();
 
     @Inject(method = "fillFromNoise", at = @At("RETURN"), cancellable = true)
-    private void afc$continuousOceanLockedV8AssignSkyGapBiome(
+    private void afc$lowerOceanBiomeV9(
             final Blender blender,
             final RandomState randomState,
             final StructureManager structureManager,
@@ -73,7 +79,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (originalFuture == null) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC sky-gap v8: fillFromNoise returned null future for chunkX={} chunkZ={}",
+                    "AFC lower-ocean v9: fillFromNoise returned null future for chunkX={} chunkZ={}",
                     chunk.getPos().x,
                     chunk.getPos().z
             );
@@ -84,11 +90,12 @@ public abstract class TFCChunkGeneratorMixin {
             try {
                 final Registry<Biome> biomeRegistry = structureManager.registryAccess().registryOrThrow(Registries.BIOME);
                 final Holder<Biome> skyGapBiome = biomeRegistry.getHolderOrThrow(SKY_GAP_BIOME_KEY);
+                final Holder<Biome> lowerOceanBiome = biomeRegistry.getHolderOrThrow(LOWER_OCEAN_BIOME_KEY);
 
-                applyContinuousTransformLocked(result, skyGapBiome);
+                applyContinuousTransformLocked(result, skyGapBiome, lowerOceanBiome);
             } catch (Throwable throwable) {
                 AerofirmacraftTerrain.LOGGER.error(
-                        "AFC sky-gap v8: transform failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
+                        "AFC lower-ocean v9: transform failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
                         result.getPos().x,
                         result.getPos().z,
                         result.getClass().getName(),
@@ -102,10 +109,14 @@ public abstract class TFCChunkGeneratorMixin {
         }));
     }
 
-    private static void applyContinuousTransformLocked(final ChunkAccess chunk, final Holder<Biome> skyGapBiome) {
+    private static void applyContinuousTransformLocked(
+            final ChunkAccess chunk,
+            final Holder<Biome> skyGapBiome,
+            final Holder<Biome> lowerOceanBiome
+    ) {
         if (!(chunk instanceof ProtoChunk)) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC sky-gap v8: skipped non-ProtoChunk chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
+                    "AFC lower-ocean v9: skipped non-ProtoChunk chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
                     chunk.getPos().x,
                     chunk.getPos().z,
                     chunk.getClass().getName(),
@@ -122,7 +133,7 @@ public abstract class TFCChunkGeneratorMixin {
         }
 
         try {
-            applyContinuousTransformUnlocked(chunk, skyGapBiome);
+            applyContinuousTransformUnlocked(chunk, skyGapBiome, lowerOceanBiome);
             chunk.setUnsaved(true);
         } finally {
             for (LevelChunkSection section : lockedSections) {
@@ -131,7 +142,11 @@ public abstract class TFCChunkGeneratorMixin {
         }
     }
 
-    private static void applyContinuousTransformUnlocked(final ChunkAccess chunk, final Holder<Biome> skyGapBiome) {
+    private static void applyContinuousTransformUnlocked(
+            final ChunkAccess chunk,
+            final Holder<Biome> skyGapBiome,
+            final Holder<Biome> lowerOceanBiome
+    ) {
         final int transformIndex = AFC_TRANSFORM_COUNT.incrementAndGet();
 
         final int minY = chunk.getHeightAccessorForGeneration().getMinBuildHeight();
@@ -152,7 +167,9 @@ public abstract class TFCChunkGeneratorMixin {
         int preservedColumns = 0;
         int definiteOceanSkyGapColumns = 0;
         int coastalSkyGapColumns = 0;
+
         int skyGapBiomeCells = 0;
+        int lowerOceanBiomeCells = 0;
 
         int airBlocks = 0;
         int crustBlocks = 0;
@@ -168,7 +185,7 @@ public abstract class TFCChunkGeneratorMixin {
         final int oceanCrustTopY = minY + OCEAN_CRUST_THICKNESS;
 
         // First pass:
-        // - create lower ocean/crust
+        // - generate lower ocean/crust blocks
         // - read original TFC biome identity
         // - classify reviewed TFC ocean/coastal biomes as sky gaps
         for (int localX = 0; localX < 16; localX++) {
@@ -205,7 +222,10 @@ public abstract class TFCChunkGeneratorMixin {
             }
         }
 
-        // Assign the new AFC biome to old-ocean/coastal columns above the lower ocean.
+        // Biome identity pass:
+        // - copied-TFC-ocean lower_ocean biome from world bottom through the Y=0 biome cell
+        // - sky_gap biome above the lower ocean for carved old-ocean/coastal gap cells
+        lowerOceanBiomeCells = assignLowerOceanBiomeCellsUnlocked(chunk, lowerOceanBiome, minY, maxY);
         skyGapBiomeCells = assignSkyGapBiomeCellsUnlocked(chunk, skyGapBiome, skyGapClassMap, minY, maxY);
 
         // Second pass:
@@ -280,10 +300,11 @@ public abstract class TFCChunkGeneratorMixin {
         AFC_TOTAL_DEFINITE_OCEAN_SKY_GAP_COLUMNS.addAndGet(definiteOceanSkyGapColumns);
         AFC_TOTAL_COASTAL_SKY_GAP_COLUMNS.addAndGet(coastalSkyGapColumns);
         AFC_TOTAL_SKY_GAP_BIOME_CELLS.addAndGet(skyGapBiomeCells);
+        AFC_TOTAL_LOWER_OCEAN_BIOME_CELLS.addAndGet(lowerOceanBiomeCells);
 
         if (transformIndex <= DETAILED_LOG_LIMIT) {
             AerofirmacraftTerrain.LOGGER.info(
-                    "AFC sky-gap v8: applied index={} chunkX={} chunkZ={} centerX={} centerZ={} centerBiome={} preservedColumns={} definiteOceanSkyGapColumns={} coastalSkyGapColumns={} skyGapBiomeCells={} airBlocks={} crustBlocks={} waterBlocks={} surfaceY={}..{} undersideY={}..{} oceanCrustTopY={} oceanTopY={} centerSurfaceY={} centerUndersideY={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' oceanTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
+                    "AFC lower-ocean v9: applied index={} chunkX={} chunkZ={} centerX={} centerZ={} centerBiome={} preservedColumns={} definiteOceanSkyGapColumns={} coastalSkyGapColumns={} skyGapBiomeCells={} lowerOceanBiomeCells={} airBlocks={} crustBlocks={} waterBlocks={} surfaceY={}..{} undersideY={}..{} oceanCrustTopY={} oceanTopY={} centerSurfaceY={} centerUndersideY={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' oceanTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
                     transformIndex,
                     chunk.getPos().x,
                     chunk.getPos().z,
@@ -294,6 +315,7 @@ public abstract class TFCChunkGeneratorMixin {
                     definiteOceanSkyGapColumns,
                     coastalSkyGapColumns,
                     skyGapBiomeCells,
+                    lowerOceanBiomeCells,
                     airBlocks,
                     crustBlocks,
                     waterBlocks,
@@ -319,7 +341,7 @@ public abstract class TFCChunkGeneratorMixin {
             );
         } else if (transformIndex % SUMMARY_LOG_INTERVAL == 0) {
             AerofirmacraftTerrain.LOGGER.info(
-                    "AFC sky-gap v8 summary: chunks={} latestChunkX={} latestChunkZ={} totalPreservedColumns={} totalDefiniteOceanSkyGapColumns={} totalCoastalSkyGapColumns={} totalSkyGapBiomeCells={} totalAirBlocks={} totalCrustBlocks={} totalWaterBlocks={} latestStatus={}",
+                    "AFC lower-ocean v9 summary: chunks={} latestChunkX={} latestChunkZ={} totalPreservedColumns={} totalDefiniteOceanSkyGapColumns={} totalCoastalSkyGapColumns={} totalSkyGapBiomeCells={} totalLowerOceanBiomeCells={} totalAirBlocks={} totalCrustBlocks={} totalWaterBlocks={} latestStatus={}",
                     transformIndex,
                     chunk.getPos().x,
                     chunk.getPos().z,
@@ -327,12 +349,60 @@ public abstract class TFCChunkGeneratorMixin {
                     AFC_TOTAL_DEFINITE_OCEAN_SKY_GAP_COLUMNS.get(),
                     AFC_TOTAL_COASTAL_SKY_GAP_COLUMNS.get(),
                     AFC_TOTAL_SKY_GAP_BIOME_CELLS.get(),
+                    AFC_TOTAL_LOWER_OCEAN_BIOME_CELLS.get(),
                     AFC_TOTAL_AIR_BLOCKS.get(),
                     AFC_TOTAL_CRUST_BLOCKS.get(),
                     AFC_TOTAL_WATER_BLOCKS.get(),
                     chunk.getPersistedStatus()
             );
         }
+    }
+
+    private static int assignLowerOceanBiomeCellsUnlocked(
+            final ChunkAccess chunk,
+            final Holder<Biome> lowerOceanBiome,
+            final int minY,
+            final int maxY
+    ) {
+        int assignedCells = 0;
+
+        final LevelChunkSection[] sections = chunk.getSections();
+
+        for (int sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
+            final LevelChunkSection section = sections[sectionIndex];
+            final int sectionMinY = minY + sectionIndex * 16;
+
+            PalettedContainer<Holder<Biome>> mutableBiomes = null;
+            boolean changed = false;
+
+            for (int quartY = 0; quartY < 4; quartY++) {
+                final int quartBlockY = sectionMinY + quartY * 4;
+
+                // Biome cells are 4 blocks tall. Including quartBlockY == 0 means the Y=0..3 cell
+                // identifies as lower ocean, which avoids inherited surface biomes right above the waterline.
+                if (quartBlockY > GLOBAL_OCEAN_TOP_Y || quartBlockY > maxY) {
+                    continue;
+                }
+
+                for (int quartX = 0; quartX < 4; quartX++) {
+                    for (int quartZ = 0; quartZ < 4; quartZ++) {
+                        if (mutableBiomes == null) {
+                            mutableBiomes = section.getBiomes().recreate();
+                        }
+
+                        mutableBiomes.getAndSetUnchecked(quartX, quartY, quartZ, lowerOceanBiome);
+                        changed = true;
+                        assignedCells++;
+                    }
+                }
+            }
+
+            if (changed && mutableBiomes != null) {
+                ((LevelChunkSectionAccessor) (Object) section).afc$setBiomes(mutableBiomes);
+            }
+        }
+
+        return assignedCells;
     }
 
     private static int assignSkyGapBiomeCellsUnlocked(
@@ -405,20 +475,16 @@ public abstract class TFCChunkGeneratorMixin {
             }
         }
 
-        // Majority of the 4x4 block columns inside this biome cell.
         return skyGapColumns >= 8;
     }
 
     private static int classifySkyGapBiomeId(final String biomeId) {
         return switch (biomeId) {
-            // Definite old-ocean water biomes.
             case "tfc:ocean",
                  "tfc:ocean_reef",
                  "tfc:deep_ocean",
                  "tfc:deep_ocean_trench" -> SKY_GAP_DEFINITE_OCEAN;
 
-            // Reviewed TFC coastal/ocean-edge biomes from #tfc:is_ocean.
-            // These are separated from definite ocean for tuning.
             case "tfc:embayments",
                  "tfc:shore",
                  "tfc:tidal_flats",
@@ -433,13 +499,6 @@ public abstract class TFCChunkGeneratorMixin {
                  "tfc:ice_sheet_oceanic",
                  "tfc:ice_sheet_shore" -> SKY_GAP_COASTAL_EDGE;
 
-            // Everything else is preserved, including:
-            // tfc:river
-            // tfc:lake and all lake variants
-            // tfc:dune_sea
-            // tfc:oceanic_mountains and oceanic mountain/lake variants
-            // tfc:volcanic_oceanic_mountains and volcanic oceanic mountain/lake variants
-            // tfc:glaciated_oceanic_mountains and carved oceanic mountain variants
             default -> SKY_GAP_NONE;
         };
     }

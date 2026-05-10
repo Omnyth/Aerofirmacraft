@@ -397,3 +397,15 @@ Changes:
 - assign sky_gap biome to majority sky-gap quart cells above the lower ocean
 - log skyGapBiomeCells
 - lower-ocean biome assignment is deferred
+
+## Current branch: terrain-tfc-noise-lower-ocean-biome-v9
+
+Goal:
+Add and assign a lower ocean biome copied from TFC ocean.json.
+
+Changes:
+- extract data/tfc/worldgen/biome/ocean.json from installed TFC jar
+- write it as data/aerofirmacraft_terrain/worldgen/biome/lower_ocean.json
+- assign lower_ocean biome to biome cells from minY through the Y=0 cell
+- keep sky_gap assignment above Y=0 for carved old-ocean/coastal gaps
+- keep original TFC biomes above Y=0 for preserved islands/rivers/lakes
