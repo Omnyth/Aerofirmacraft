@@ -17,10 +17,10 @@ public final class AerofirmacraftTerrain {
 
         modEventBus.addListener(this::commonSetup);
 
-        LOGGER.info("Aerofirmacraft Terrain constructed. Real TFC-compatible lower_ocean biome v21b raw noise-settings diagnostic active.");
+        LOGGER.info("Aerofirmacraft Terrain constructed. Real TFC-compatible lower_ocean biome v22 min-y -256 lower-ocean spacing diagnostic active.");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        LOGGER.info("Aerofirmacraft Terrain common setup complete. V21b keeps the real lower_ocean BiomeExtension and uses raw-patched overworld noise settings.");
+        LOGGER.info("Aerofirmacraft Terrain common setup complete. V22 extends dimension and noise settings to minY=-256 and moves the lower_ocean target deeper.");
     }
 }

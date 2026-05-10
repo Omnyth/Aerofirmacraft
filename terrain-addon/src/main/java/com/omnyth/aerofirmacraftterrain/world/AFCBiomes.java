@@ -35,11 +35,11 @@ public final class AFCBiomes {
             "lower_ocean",
             () -> BiomeBuilder.builder()
                     // Copied from TFC ocean shape, then shifted downward for AFC testing.
-                    // TFC ocean: BiomeNoise.ocean(seed, -26, -12), aquiferHeightOffset(-24)
+                    // TFC ocean: BiomeNoise.ocean(seed, -218, -204), aquiferHeightOffset(-24)
                     // AFC v20 lower ocean: intentionally much lower.
-                    .heightmap(seed -> BiomeNoise.ocean(seed, -90, -76))
+                    .heightmap(seed -> BiomeNoise.ocean(seed, -218, -204))
                     .surface(ShoreAndOceanSurfaceBuilder.OCEAN)
-                    .aquiferHeightOffset(-88)
+                    .aquiferHeightOffset(-216)
                     .salty()
                     .type(BiomeBlendType.OCEAN)
                     .noRivers()

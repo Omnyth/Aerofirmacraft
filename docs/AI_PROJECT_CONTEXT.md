@@ -513,3 +513,20 @@ Changes:
 - raw-patch first height to preserve original top Y
 - avoid ConvertTo-Json rewrite
 - no manual water/stone/bedrock fill
+
+## Current branch: terrain-tfc-real-lower-ocean-biome-v22-min-y-256
+
+Goal:
+Move dimension/noise min_y to -256 and place the experimental lower_ocean target much deeper.
+
+Changes:
+- base from V21b
+- raw-patch dimension_type/overworld.json to min_y=-256
+- raw-patch worldgen/noise_settings/overworld.json to min_y=-256
+- preserve original top Y
+- expected minY now -256
+- lower ocean probe band now Y=-256..-193
+- lower_ocean biome cap now Y=-189
+- experimental lower_ocean BiomeExtension shifted to BiomeNoise.ocean(seed, -218, -204)
+- aquiferHeightOffset shifted to -216
+- no manual water/stone/bedrock fill

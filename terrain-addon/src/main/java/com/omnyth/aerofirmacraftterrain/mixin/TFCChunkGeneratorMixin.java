@@ -33,13 +33,13 @@ import java.util.concurrent.atomic.AtomicLong;
 
 @Mixin(targets = "net.dries007.tfc.world.TFCChunkGenerator", remap = false)
 public abstract class TFCChunkGeneratorMixin {
-    private static final int EXPECTED_DIMENSION_MIN_Y = -128;
+    private static final int EXPECTED_DIMENSION_MIN_Y = -256;
     private static final int OLD_TFC_MIN_Y = -64;
 
     // V20 does not place water/stone/bedrock here.
     // It only applies the real custom biome and probes what generation does.
-    private static final int LOWER_OCEAN_WATER_TOP_Y = OLD_TFC_MIN_Y - 1; // -65
-    private static final int LOWER_OCEAN_BIOME_TOP_Y = OLD_TFC_MIN_Y + 3; // -61
+    private static final int LOWER_OCEAN_WATER_TOP_Y = -193; // -65
+    private static final int LOWER_OCEAN_BIOME_TOP_Y = -189; // -61
 
     private static final int DETAILED_LOG_LIMIT = 8;
     private static final int SUMMARY_LOG_INTERVAL = 512;
@@ -69,7 +69,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (originalFuture == null) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC V21bb biome: createBiomes returned null future for chunkX={} chunkZ={}",
+                    "AFC v22 biome: createBiomes returned null future for chunkX={} chunkZ={}",
                     chunk.getPos().x,
                     chunk.getPos().z
             );
@@ -88,7 +88,7 @@ public abstract class TFCChunkGeneratorMixin {
                 assignLowerOceanBiomeLocked(result, lowerOceanBiome, true);
             } catch (Throwable throwable) {
                 AerofirmacraftTerrain.LOGGER.error(
-                        "AFC V21bb biome: pre-noise lower_ocean biome assignment failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
+                        "AFC v22 biome: pre-noise lower_ocean biome assignment failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
                         result.getPos().x,
                         result.getPos().z,
                         result.getClass().getName(),
@@ -114,7 +114,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (originalFuture == null) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC V21bb probe: fillFromNoise returned null future for chunkX={} chunkZ={}",
+                    "AFC v22 probe: fillFromNoise returned null future for chunkX={} chunkZ={}",
                     chunk.getPos().x,
                     chunk.getPos().z
             );
@@ -130,7 +130,7 @@ public abstract class TFCChunkGeneratorMixin {
                 probeLowerBandLocked(result);
             } catch (Throwable throwable) {
                 AerofirmacraftTerrain.LOGGER.error(
-                        "AFC V21bb probe: lower_ocean probe failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
+                        "AFC v22 probe: lower_ocean probe failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
                         result.getPos().x,
                         result.getPos().z,
                         result.getClass().getName(),
@@ -174,7 +174,7 @@ public abstract class TFCChunkGeneratorMixin {
 
                 if (index <= DETAILED_LOG_LIMIT || index % SUMMARY_LOG_INTERVAL == 0) {
                     AerofirmacraftTerrain.LOGGER.info(
-                            "AFC V21bb biome: index={} chunkX={} chunkZ={} minY={} lowerOceanCells={} totalPreNoiseLowerOceanCells={} status={}",
+                            "AFC v22 biome: index={} chunkX={} chunkZ={} minY={} lowerOceanCells={} totalPreNoiseLowerOceanCells={} status={}",
                             index,
                             chunk.getPos().x,
                             chunk.getPos().z,
@@ -254,7 +254,7 @@ public abstract class TFCChunkGeneratorMixin {
                 final BlockState centerTopBlock = getBlockStateUnlocked(chunk, 8, clamp(LOWER_OCEAN_WATER_TOP_Y, minY, maxY), 8);
 
                 AerofirmacraftTerrain.LOGGER.info(
-                        "AFC V21bb probe: index={} chunkX={} chunkZ={} minY={} probeY={}..{} centerBiomeWaterTop={} centerBiomeBiomeCap={} lowerAirBlocks={} lowerNonAirBlocks={} lowerFluidBlocks={} totalLowerAirBlocks={} totalLowerNonAirBlocks={} totalLowerFluidBlocks={} centerBottomBlock='{}' centerMidBlock='{}' centerTopBlock='{}' status={} lowerBandTp='/tp @s {} {} {}'",
+                        "AFC v22 probe: index={} chunkX={} chunkZ={} minY={} probeY={}..{} centerBiomeWaterTop={} centerBiomeBiomeCap={} lowerAirBlocks={} lowerNonAirBlocks={} lowerFluidBlocks={} totalLowerAirBlocks={} totalLowerNonAirBlocks={} totalLowerFluidBlocks={} centerBottomBlock='{}' centerMidBlock='{}' centerTopBlock='{}' status={} lowerBandTp='/tp @s {} {} {}'",
                         index,
                         chunk.getPos().x,
                         chunk.getPos().z,
@@ -296,13 +296,13 @@ public abstract class TFCChunkGeneratorMixin {
 
             if (biomePresent && extension.isPresent()) {
                 AerofirmacraftTerrain.LOGGER.info(
-                        "AFC V21bb extension sanity passed: biome={} extension={} registered=true",
+                        "AFC v22 extension sanity passed: biome={} extension={} registered=true",
                         AFCBiomes.LOWER_OCEAN_BIOME_KEY.location(),
                         AFCBiomes.LOWER_OCEAN_ID
                 );
             } else {
                 AerofirmacraftTerrain.LOGGER.warn(
-                        "AFC V21bb extension sanity failed: biomePresent={} extensionPresent={} biome={} extension={}",
+                        "AFC v22 extension sanity failed: biomePresent={} extensionPresent={} biome={} extension={}",
                         biomePresent,
                         extension.isPresent(),
                         AFCBiomes.LOWER_OCEAN_BIOME_KEY.location(),
@@ -316,7 +316,7 @@ public abstract class TFCChunkGeneratorMixin {
         if (AFC_DIMENSION_SANITY_LOGGED.compareAndSet(false, true)) {
             if (minY != EXPECTED_DIMENSION_MIN_Y) {
                 AerofirmacraftTerrain.LOGGER.warn(
-                        "AFC V21bb dimension sanity: expected minY={} but got minY={}. maxY={} lowerOceanWaterTopY={} lowerOceanBiomeTopY={}",
+                        "AFC v22 dimension sanity: expected minY={} but got minY={}. maxY={} lowerOceanWaterTopY={} lowerOceanBiomeTopY={}",
                         EXPECTED_DIMENSION_MIN_Y,
                         minY,
                         maxY,
@@ -325,7 +325,7 @@ public abstract class TFCChunkGeneratorMixin {
                 );
             } else {
                 AerofirmacraftTerrain.LOGGER.info(
-                        "AFC V21bb dimension sanity passed: minY={} maxY={} lowerOceanWaterTopY={} lowerOceanBiomeTopY={} oldTfcMinY={}",
+                        "AFC v22 dimension sanity passed: minY={} maxY={} lowerOceanWaterTopY={} lowerOceanBiomeTopY={} oldTfcMinY={}",
                         minY,
                         maxY,
                         LOWER_OCEAN_WATER_TOP_Y,
