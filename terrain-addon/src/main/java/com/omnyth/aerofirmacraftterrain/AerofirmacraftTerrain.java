@@ -17,10 +17,10 @@ public final class AerofirmacraftTerrain {
 
         modEventBus.addListener(this::commonSetup);
 
-        LOGGER.info("Aerofirmacraft Terrain constructed. Lower ocean dev 0.1.0-dev.26b active.");
+        LOGGER.info("Aerofirmacraft Terrain constructed. Lower ocean dev 0.1.0-dev.27 active.");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        LOGGER.info("Aerofirmacraft Terrain common setup complete. V26b column-plan startup fix active.");
+        LOGGER.info("Aerofirmacraft Terrain common setup complete. V27 planner-controlled lower ocean active.");
     }
 }
