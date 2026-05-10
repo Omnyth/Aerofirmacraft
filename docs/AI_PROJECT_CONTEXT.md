@@ -220,3 +220,17 @@ Design:
 - use thicker island mass for later ore validation
 - avoid block/fluid registry lookups because previous registry-ID classifiers triggered tfc:salt_water crashes
 - mutate only one ProtoChunk at minecraft:noise
+
+## Current branch: terrain-tfc-noise-3x3-region-transform
+
+Goal:
+Scale from one full transformed chunk to a small 3x3 transformed region.
+
+Design:
+- first height-valid chunk becomes target center
+- transform up to 9 chunks in target 3x3
+- preserve original TFC surface Y
+- carve underneath
+- no block/fluid registry lookups
+- no serverLevel.setBlock
+- no ChunkEvent.Load

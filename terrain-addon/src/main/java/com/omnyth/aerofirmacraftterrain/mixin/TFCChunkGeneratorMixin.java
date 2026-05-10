@@ -13,26 +13,33 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Mixin(targets = "net.dries007.tfc.world.TFCChunkGenerator", remap = false)
 public abstract class TFCChunkGeneratorMixin {
-    private static final AtomicBoolean AFC_DID_TRANSFORM = new AtomicBoolean(false);
+    private static final Object AFC_TARGET_LOCK = new Object();
+    private static final Set<Long> AFC_TRANSFORMED_CHUNKS = ConcurrentHashMap.newKeySet();
     private static final AtomicInteger AFC_SKIP_COUNT = new AtomicInteger();
+
+    private static boolean afc$targetSelected = false;
+    private static int afc$targetChunkX = 0;
+    private static int afc$targetChunkZ = 0;
 
     private static final int GLOBAL_OCEAN_TOP_Y = 0;
     private static final int LAND_TRIGGER_SURFACE_Y = 66;
 
-    // Bigger than the test patch so we preserve enough mass for later ore testing.
     private static final int BASE_LAND_MASS_THICKNESS = 44;
     private static final int THICKNESS_VARIATION = 10;
 
-    private static final int SKIP_LOG_LIMIT = 32;
+    private static final int REGION_RADIUS_CHUNKS = 1;
+    private static final int MAX_TRANSFORMED_CHUNKS = 9;
+    private static final int SKIP_LOG_LIMIT = 48;
 
     @Inject(method = "fillFromNoise", at = @At("RETURN"))
-    private void afc$fullChunkTransform(
+    private void afc$regionTransform(
             final Blender blender,
             final RandomState randomState,
             final StructureManager structureManager,
@@ -43,7 +50,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (future == null) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC full transform: fillFromNoise returned null future for chunkX={} chunkZ={}",
+                    "AFC region transform: fillFromNoise returned null future for chunkX={} chunkZ={}",
                     chunk.getPos().x,
                     chunk.getPos().z
             );
@@ -53,15 +60,11 @@ public abstract class TFCChunkGeneratorMixin {
         future.whenComplete((result, throwable) -> {
             if (throwable != null) {
                 AerofirmacraftTerrain.LOGGER.error(
-                        "AFC full transform: fillFromNoise future failed for chunkX={} chunkZ={}",
+                        "AFC region transform: fillFromNoise future failed for chunkX={} chunkZ={}",
                         chunk.getPos().x,
                         chunk.getPos().z,
                         throwable
                 );
-                return;
-            }
-
-            if (AFC_DID_TRANSFORM.get()) {
                 return;
             }
 
@@ -72,31 +75,46 @@ public abstract class TFCChunkGeneratorMixin {
             final int centerSurfaceY = findTopNonAirY(result, centerWorldX, centerWorldZ, minY, maxY);
 
             if (centerSurfaceY < LAND_TRIGGER_SURFACE_Y) {
-                final int skip = AFC_SKIP_COUNT.incrementAndGet();
-
-                if (skip <= SKIP_LOG_LIMIT) {
-                    AerofirmacraftTerrain.LOGGER.info(
-                            "AFC full transform: skipped chunkX={} chunkZ={} centerSurfaceY={} requiredSurfaceY={}",
-                            result.getPos().x,
-                            result.getPos().z,
-                            centerSurfaceY,
-                            LAND_TRIGGER_SURFACE_Y
-                    );
-                } else if (skip == SKIP_LOG_LIMIT + 1) {
-                    AerofirmacraftTerrain.LOGGER.info(
-                            "AFC full transform: skip log limit reached. Further skip logs suppressed."
-                    );
-                }
-
+                logSkip(result, centerSurfaceY, "low_center_surface");
                 return;
             }
 
-            if (!AFC_DID_TRANSFORM.compareAndSet(false, true)) {
+            if (!claimChunkForRegion(result)) {
                 return;
             }
 
             applyFullChunkTransform(result, centerSurfaceY);
         });
+    }
+
+    private static boolean claimChunkForRegion(final ChunkAccess chunk) {
+        synchronized (AFC_TARGET_LOCK) {
+            if (!afc$targetSelected) {
+                afc$targetSelected = true;
+                afc$targetChunkX = chunk.getPos().x;
+                afc$targetChunkZ = chunk.getPos().z;
+
+                AerofirmacraftTerrain.LOGGER.info(
+                        "AFC region transform: selected target center chunkX={} chunkZ={}",
+                        afc$targetChunkX,
+                        afc$targetChunkZ
+                );
+            }
+
+            final int dx = Math.abs(chunk.getPos().x - afc$targetChunkX);
+            final int dz = Math.abs(chunk.getPos().z - afc$targetChunkZ);
+
+            if (dx > REGION_RADIUS_CHUNKS || dz > REGION_RADIUS_CHUNKS) {
+                logSkip(chunk, -9999, "outside_target_3x3");
+                return false;
+            }
+
+            if (AFC_TRANSFORMED_CHUNKS.size() >= MAX_TRANSFORMED_CHUNKS) {
+                return false;
+            }
+
+            return AFC_TRANSFORMED_CHUNKS.add(chunk.getPos().toLong());
+        }
     }
 
     private static void applyFullChunkTransform(final ChunkAccess chunk, final int centerSurfaceY) {
@@ -135,8 +153,6 @@ public abstract class TFCChunkGeneratorMixin {
                 if (surfaceY < LAND_TRIGGER_SURFACE_Y) {
                     lowColumns++;
 
-                    // Treat lower columns as ocean/shore/lowland-like for this prototype:
-                    // clear above the future low ocean layer, but do not do registry checks.
                     final int carveTopY = clamp(surfaceY + 6, GLOBAL_OCEAN_TOP_Y + 1, maxY);
 
                     for (int y = GLOBAL_OCEAN_TOP_Y + 1; y <= carveTopY; y++) {
@@ -161,7 +177,6 @@ public abstract class TFCChunkGeneratorMixin {
                         centerUndersideY = undersideY;
                     }
 
-                    // Mark every 4th underside column with glowstone so the shape is visible without filling the whole underside.
                     if ((localX % 4 == 0) && (localZ % 4 == 0)) {
                         mutablePos.set(worldX, undersideY, worldZ);
                         chunk.setBlockState(mutablePos, glowstone, false);
@@ -188,9 +203,12 @@ public abstract class TFCChunkGeneratorMixin {
         chunk.setUnsaved(true);
 
         AerofirmacraftTerrain.LOGGER.info(
-                "AFC full transform: applied chunkX={} chunkZ={} centerX={} centerZ={} landLikeColumns={} lowColumns={} airBlocks={} markerBlocks={} surfaceY={}..{} undersideY={}..{} centerSurfaceY={} centerUndersideY={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
+                "AFC region transform: applied index={} chunkX={} chunkZ={} targetChunkX={} targetChunkZ={} centerX={} centerZ={} landLikeColumns={} lowColumns={} airBlocks={} markerBlocks={} surfaceY={}..{} undersideY={}..{} centerSurfaceY={} centerUndersideY={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
+                AFC_TRANSFORMED_CHUNKS.size(),
                 chunk.getPos().x,
                 chunk.getPos().z,
+                afc$targetChunkX,
+                afc$targetChunkZ,
                 centerWorldX,
                 centerWorldZ,
                 landLikeColumns,
@@ -212,6 +230,24 @@ public abstract class TFCChunkGeneratorMixin {
                 Math.max(GLOBAL_OCEAN_TOP_Y + 4, centerUndersideY - 8),
                 centerWorldZ
         );
+    }
+
+    private static void logSkip(final ChunkAccess chunk, final int centerSurfaceY, final String reason) {
+        final int skip = AFC_SKIP_COUNT.incrementAndGet();
+
+        if (skip <= SKIP_LOG_LIMIT) {
+            AerofirmacraftTerrain.LOGGER.info(
+                    "AFC region transform: skipped chunkX={} chunkZ={} centerSurfaceY={} reason={}",
+                    chunk.getPos().x,
+                    chunk.getPos().z,
+                    centerSurfaceY,
+                    reason
+            );
+        } else if (skip == SKIP_LOG_LIMIT + 1) {
+            AerofirmacraftTerrain.LOGGER.info(
+                    "AFC region transform: skip log limit reached. Further skip logs suppressed."
+            );
+        }
     }
 
     private static int findTopNonAirY(
