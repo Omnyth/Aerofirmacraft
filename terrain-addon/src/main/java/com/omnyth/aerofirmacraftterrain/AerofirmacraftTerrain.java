@@ -14,10 +14,10 @@ public final class AerofirmacraftTerrain {
     public AerofirmacraftTerrain(IEventBus modEventBus) {
         modEventBus.addListener(this::commonSetup);
 
-        LOGGER.info("Aerofirmacraft Terrain constructed. Sky-gap biome v7 resources active.");
+        LOGGER.info("Aerofirmacraft Terrain constructed. Sky-gap biome v8 assignment prototype active.");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        LOGGER.info("Aerofirmacraft Terrain common setup complete. V7 adds aerofirmacraft_terrain:sky_gap biome data.");
+        LOGGER.info("Aerofirmacraft Terrain common setup complete. V8 assigns sky_gap biome to carved old-ocean columns above Y=0.");
     }
 }

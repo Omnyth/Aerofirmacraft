@@ -383,3 +383,17 @@ Changes:
 - keep V6 biome-driven terrain transform unchanged
 - do not mutate biome palettes yet
 - next branch should assign aerofirmacraft_terrain:sky_gap to carved old-ocean/coastal columns
+
+## Current branch: terrain-tfc-noise-sky-gap-biome-v8-assign
+
+Goal:
+Assign the new AFC sky_gap biome to carved old-ocean/coastal biome cells above Y=0.
+
+Changes:
+- keep V6 biome-driven terrain transform
+- keep V7 sky_gap biome resource
+- add LevelChunkSectionAccessor for biome container replacement
+- recreate each section biome palette when needed
+- assign sky_gap biome to majority sky-gap quart cells above the lower ocean
+- log skyGapBiomeCells
+- lower-ocean biome assignment is deferred
