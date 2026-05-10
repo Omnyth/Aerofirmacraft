@@ -84,9 +84,11 @@ public abstract class TFCChunkGeneratorMixin {
     private static final AtomicLong AFC_TOTAL_ISLAND_SOLID_BLOCKS = new AtomicLong();
     private static final AtomicLong AFC_TOTAL_AIR_BLOCKS = new AtomicLong();
     private static final AtomicLong AFC_TOTAL_SKIPPED_INTERIOR_CHUNKS = new AtomicLong();
+    private static final AtomicLong AFC_TOTAL_OCEAN_PLAN_CHUNKS = new AtomicLong();
+    private static final AtomicLong AFC_TOTAL_SKY_COAST_PLAN_CHUNKS = new AtomicLong();
 
     @Inject(method = "createBiomes", at = @At("RETURN"), cancellable = true)
-    private void afc$assignLowerOceanBiomesV27b(
+    private void afc$assignLowerOceanBiomesV28(
             final RandomState randomState,
             final Blender blender,
             final StructureManager structureManager,
@@ -97,7 +99,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (originalFuture == null) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC v27bb biome: createBiomes returned null future for chunkX={} chunkZ={}",
+                    "AFC v28 biome: createBiomes returned null future for chunkX={} chunkZ={}",
                     chunk.getPos().x,
                     chunk.getPos().z
             );
@@ -116,7 +118,7 @@ public abstract class TFCChunkGeneratorMixin {
                 assignLowerOceanBiomeLocked(result, lowerOceanBiome, true);
             } catch (Throwable throwable) {
                 AerofirmacraftTerrain.LOGGER.error(
-                        "AFC v27bb biome: pre-noise lower_ocean biome assignment failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
+                        "AFC v28 biome: pre-noise lower_ocean biome assignment failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
                         result.getPos().x,
                         result.getPos().z,
                         result.getClass().getName(),
@@ -131,7 +133,7 @@ public abstract class TFCChunkGeneratorMixin {
     }
 
     @Inject(method = "fillFromNoise", at = @At("RETURN"), cancellable = true)
-    private void afc$generateColumnPlansV27b(
+    private void afc$generateColumnPlansV28(
             final Blender blender,
             final RandomState randomState,
             final StructureManager structureManager,
@@ -142,7 +144,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (originalFuture == null) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC v27bb column-plan: fillFromNoise returned null future for chunkX={} chunkZ={}",
+                    "AFC v28 column-plan: fillFromNoise returned null future for chunkX={} chunkZ={}",
                     chunk.getPos().x,
                     chunk.getPos().z
             );
@@ -158,7 +160,7 @@ public abstract class TFCChunkGeneratorMixin {
                 generateColumnPlanLocked(result);
             } catch (Throwable throwable) {
                 AerofirmacraftTerrain.LOGGER.error(
-                        "AFC v27bb column-plan: generation failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
+                        "AFC v28 column-plan: generation failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
                         result.getPos().x,
                         result.getPos().z,
                         result.getClass().getName(),
@@ -197,7 +199,7 @@ public abstract class TFCChunkGeneratorMixin {
 
                 if (index <= DETAILED_LOG_LIMIT || index % SUMMARY_LOG_INTERVAL == 0) {
                     AerofirmacraftTerrain.LOGGER.info(
-                            "AFC v27bb biome: index={} chunkX={} chunkZ={} minY={} assignedLowerOceanCells={} totalPreNoiseLowerOceanCells={} status={}",
+                            "AFC v28 biome: index={} chunkX={} chunkZ={} minY={} assignedLowerOceanCells={} totalPreNoiseLowerOceanCells={} status={}",
                             index,
                             chunk.getPos().x,
                             chunk.getPos().z,
@@ -257,7 +259,7 @@ public abstract class TFCChunkGeneratorMixin {
                 final String centerLowerBiome = getBiomeIdForColumn(chunk, 8, LOWER_OCEAN_WATER_TOP_Y, 8, minY, maxY);
 
                 AerofirmacraftTerrain.LOGGER.info(
-                        "AFC v27bb column-plan: index={} chunkX={} chunkZ={} skippedPureInterior=true plans[lowerOcean={}, skyCoast={}, landInterior={}, preserve={}] centerPlan={} centerUpperBiome={} centerLowerBiome={} totalSkippedInteriorChunks={} status={}",
+                        "AFC v28 column-plan: index={} chunkX={} chunkZ={} skippedPureInterior=true plans[lowerOcean={}, skyCoast={}, landInterior={}, preserve={}] centerPlan={} centerUpperBiome={} centerLowerBiome={} totalSkippedInteriorChunks={} status={}",
                         index,
                         chunk.getPos().x,
                         chunk.getPos().z,
@@ -375,7 +377,10 @@ public abstract class TFCChunkGeneratorMixin {
         AFC_TOTAL_ISLAND_SOLID_BLOCKS.addAndGet(islandSolidBlocks);
         AFC_TOTAL_AIR_BLOCKS.addAndGet(airBlocks);
 
-        if (index <= DETAILED_LOG_LIMIT || index % SUMMARY_LOG_INTERVAL == 0) {
+        final long oceanPlanChunkIndex = counts[0] > 0 ? AFC_TOTAL_OCEAN_PLAN_CHUNKS.incrementAndGet() : AFC_TOTAL_OCEAN_PLAN_CHUNKS.get();
+        final long skyCoastPlanChunkIndex = counts[1] > 0 ? AFC_TOTAL_SKY_COAST_PLAN_CHUNKS.incrementAndGet() : AFC_TOTAL_SKY_COAST_PLAN_CHUNKS.get();
+
+        if (index <= DETAILED_LOG_LIMIT || index % SUMMARY_LOG_INTERVAL == 0 || oceanPlanChunkIndex <= 32 || skyCoastPlanChunkIndex <= 32) {
             final String centerUpperBiome = getBiomeIdForColumn(chunk, 8, SURFACE_BIOME_SAMPLE_Y, 8, minY, maxY);
             final String centerLowerBiome = getBiomeIdForColumn(chunk, 8, LOWER_OCEAN_WATER_TOP_Y, 8, minY, maxY);
 
@@ -385,10 +390,12 @@ public abstract class TFCChunkGeneratorMixin {
             final BlockState centerIslandBottomBlock = getBlockStateUnlocked(chunk, 8, clamp(centerIslandBottomY, minY, maxY), 8);
 
             AerofirmacraftTerrain.LOGGER.info(
-                    "AFC v27bb column-plan: index={} chunkX={} chunkZ={} skippedPureInterior=false plans[lowerOcean={}, skyCoast={}, landInterior={}, preserve={}] centerPlan={} centerUpperBiome={} centerLowerBiome={} waterBlocks={} solidFloorBlocks={} islandSolidBlocks={} airBlocks={} totalWaterBlocks={} totalSolidFloorBlocks={} totalIslandSolidBlocks={} totalAirBlocks={} centerFloorY={} centerIslandBottomY={} centerOceanWaterBlock='{}' centerOceanFloorBlock='{}' centerGapBlock='{}' centerIslandBottomBlock='{}' status={} lowerOceanTp='/tp @s {} {} {}' skyGapTp='/tp @s {} {} {}' islandBottomTp='/tp @s {} {} {}'",
+                    "AFC v28 column-plan: index={} chunkX={} chunkZ={} skippedPureInterior=false plans[lowerOcean={}, skyCoast={}, landInterior={}, preserve={}] centerPlan={} centerUpperBiome={} centerLowerBiome={} waterBlocks={} solidFloorBlocks={} islandSolidBlocks={} airBlocks={} totalWaterBlocks={} totalSolidFloorBlocks={} totalIslandSolidBlocks={} totalAirBlocks={} centerFloorY={} centerIslandBottomY={} centerOceanWaterBlock='{}' centerOceanFloorBlock='{}' centerGapBlock='{}' centerIslandBottomBlock='{}' status={} lowerOceanTp='/tp @s {} {} {}' skyGapTp='/tp @s {} {} {}' islandBottomTp='/tp @s {} {} {}'",
                     index,
                     chunk.getPos().x,
                     chunk.getPos().z,
+                    oceanPlanChunkIndex,
+                    skyCoastPlanChunkIndex,
                     counts[0],
                     counts[1],
                     counts[2],
@@ -626,13 +633,13 @@ public abstract class TFCChunkGeneratorMixin {
 
             if (biomePresent && extension.isPresent()) {
                 AerofirmacraftTerrain.LOGGER.info(
-                        "AFC v27bb extension sanity passed: biome={} extension={} registered=true",
+                        "AFC v28 extension sanity passed: biome={} extension={} registered=true",
                         AFCBiomes.LOWER_OCEAN_BIOME_KEY.location(),
                         AFCBiomes.LOWER_OCEAN_ID
                 );
             } else {
                 AerofirmacraftTerrain.LOGGER.warn(
-                        "AFC v27bb extension sanity failed: biomePresent={} extensionPresent={} biome={} extension={}",
+                        "AFC v28 extension sanity failed: biomePresent={} extensionPresent={} biome={} extension={}",
                         biomePresent,
                         extension.isPresent(),
                         AFCBiomes.LOWER_OCEAN_BIOME_KEY.location(),
@@ -646,7 +653,7 @@ public abstract class TFCChunkGeneratorMixin {
         if (AFC_DIMENSION_SANITY_LOGGED.compareAndSet(false, true)) {
             if (minY != EXPECTED_DIMENSION_MIN_Y) {
                 AerofirmacraftTerrain.LOGGER.warn(
-                        "AFC v27bb dimension sanity: expected minY={} but got minY={}. maxY={} lowerOceanWaterTopY={} lowerOceanBiomeTopY={}",
+                        "AFC v28 dimension sanity: expected minY={} but got minY={}. maxY={} lowerOceanWaterTopY={} lowerOceanBiomeTopY={}",
                         EXPECTED_DIMENSION_MIN_Y,
                         minY,
                         maxY,
@@ -655,7 +662,7 @@ public abstract class TFCChunkGeneratorMixin {
                 );
             } else {
                 AerofirmacraftTerrain.LOGGER.info(
-                        "AFC v27bb dimension sanity passed: minY={} maxY={} lowerOceanWaterTopY={} lowerOceanBiomeTopY={} oldTfcMinY={}",
+                        "AFC v28 dimension sanity passed: minY={} maxY={} lowerOceanWaterTopY={} lowerOceanBiomeTopY={} oldTfcMinY={}",
                         minY,
                         maxY,
                         LOWER_OCEAN_WATER_TOP_Y,
@@ -717,7 +724,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (AFC_SALT_WATER_SANITY_LOGGED.compareAndSet(false, true)) {
             AerofirmacraftTerrain.LOGGER.info(
-                    "AFC v27bb salt water sanity: fluid={} blockState='{}'",
+                    "AFC v28 salt water sanity: fluid={} blockState='{}'",
                     saltWaterId,
                     state
             );
