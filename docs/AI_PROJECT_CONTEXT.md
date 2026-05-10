@@ -421,3 +421,27 @@ Changes:
 - assign tfc:ocean to biome cells from minY through the Y=0 cell
 - keep sky_gap assignment above Y=0 for carved old-ocean/coastal gaps
 - keep original TFC biomes above Y=0 for preserved islands/rivers/lakes
+
+## Current branch: terrain-tfc-noise-lower-ocean-prenoise-v11
+
+Goal:
+Assign tfc:ocean below Y=0 during createBiomes before fillFromNoise.
+
+Changes:
+- keep V10 fillFromNoise transform
+- add createBiomes RETURN hook
+- assign existing tfc:ocean to lower biome cells before noise generation
+- log pre-noise lower ocean biome assignment separately
+- keep sky_gap assignment above Y=0 for carved old-ocean/coastal gaps
+
+## Current branch: terrain-tfc-noise-lower-ocean-prenoise-v11
+
+Goal:
+Assign tfc:ocean below Y=0 during createBiomes before fillFromNoise.
+
+Changes:
+- keep V10 fillFromNoise transform
+- add createBiomes RETURN hook
+- assign existing tfc:ocean to lower biome cells before noise generation
+- log pre-noise lower ocean biome assignment separately
+- keep sky_gap assignment above Y=0 for carved old-ocean/coastal gaps
