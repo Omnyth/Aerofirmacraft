@@ -272,3 +272,17 @@ Changes:
 - keep original TFC surface height
 - still mutate only ProtoChunks at minecraft:noise
 - still avoid block/fluid registry lookups
+
+## Current branch: terrain-tfc-noise-9x9-ocean-floor-prototype
+
+Goal:
+Scale from 5x5 ocean-floor prototype to a larger 9x9 gameplay-scale region.
+
+Changes:
+- radius 4 chunks
+- max 81 transformed chunks
+- keep ocean floor/crust layer
+- keep original TFC surface height
+- still mutate only ProtoChunks at minecraft:noise
+- still avoid block/fluid registry lookups
+- check outside-region status before transform-limit status for better skip logs
