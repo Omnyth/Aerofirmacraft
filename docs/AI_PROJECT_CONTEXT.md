@@ -464,3 +464,16 @@ Changes:
 - remove old-ocean sky-gap carving
 - remove preserved island underside carving
 - remove sky_gap biome assignment from generation path
+
+## Current branch: terrain-tfc-lower-ocean-biome-only-v19-no-block-fill
+
+Goal:
+Remove all lower-band block placement and test lower-ocean biome assignment alone.
+
+Changes:
+- base from V18
+- keep min_y=-128 dimension override
+- assign tfc:ocean to lower Y range during createBiomes
+- reassign tfc:ocean after fillFromNoise
+- remove all bedrock/stone/water placement in lower band
+- probe lowerAirBlocks/lowerNonAirBlocks/lowerFluidBlocks
