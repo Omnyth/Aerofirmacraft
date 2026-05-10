@@ -311,3 +311,15 @@ Changes:
 - acquire/release all LevelChunkSections during block mutation
 - fix low-only chunk underside fallback from -9999 to oceanTop + 4
 - keep 9x9 bounded test
+
+## Current branch: terrain-tfc-noise-9x9-ocean-future-chain-locked-v2
+
+Goal:
+Diagnose and fix locked V1 stopping after target selection.
+
+Changes:
+- acquire LevelChunkSection locks before any getBlockState/setBlockState calls
+- move center surface scanning inside locked section
+- add lock attempt/acquired/released logs
+- wrap transform in try/catch for visible latest.log failures
+- keep bounded 9x9 future-chain transform

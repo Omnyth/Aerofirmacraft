@@ -28,6 +28,7 @@ public abstract class TFCChunkGeneratorMixin {
 
     private static final AtomicInteger AFC_TRANSFORM_COUNT = new AtomicInteger();
     private static final AtomicInteger AFC_SKIP_COUNT = new AtomicInteger();
+    private static final AtomicInteger AFC_LOCK_ATTEMPT_COUNT = new AtomicInteger();
 
     private static boolean afc$targetSelected = false;
     private static int afc$targetChunkX = 0;
@@ -41,12 +42,14 @@ public abstract class TFCChunkGeneratorMixin {
 
     private static final int REGION_RADIUS_CHUNKS = 4;
     private static final int MAX_TRANSFORMED_CHUNKS = 81;
+
     private static final int SKIP_LOG_LIMIT = 32;
+    private static final int LOCK_LOG_LIMIT = 48;
 
     private static final int OCEAN_CRUST_THICKNESS = 8;
 
     @Inject(method = "fillFromNoise", at = @At("RETURN"), cancellable = true)
-    private void afc$regionTransform9x9FutureChainLocked(
+    private void afc$regionTransform9x9FutureChainLockedV2(
             final Blender blender,
             final RandomState randomState,
             final StructureManager structureManager,
@@ -57,7 +60,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (originalFuture == null) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC locked 9x9: fillFromNoise returned null future for chunkX={} chunkZ={}",
+                    "AFC locked v2: fillFromNoise returned null future for chunkX={} chunkZ={}",
                     chunk.getPos().x,
                     chunk.getPos().z
             );
@@ -65,18 +68,90 @@ public abstract class TFCChunkGeneratorMixin {
         }
 
         cir.setReturnValue(originalFuture.thenApply(result -> {
-            final int centerSurfaceY = getCenterSurfaceY(result);
-            final int transformIndex = claimChunkForTransform(result, centerSurfaceY);
-
-            if (transformIndex > 0) {
-                applyFullChunkTransformLocked(result, centerSurfaceY, transformIndex);
+            try {
+                applyMaybeTransformLocked(result);
+            } catch (Throwable throwable) {
+                AerofirmacraftTerrain.LOGGER.error(
+                        "AFC locked v2: transform failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
+                        result.getPos().x,
+                        result.getPos().z,
+                        result.getClass().getName(),
+                        result.getPersistedStatus(),
+                        throwable
+                );
+                throw throwable;
             }
 
             return result;
         }));
     }
 
-    private static int getCenterSurfaceY(final ChunkAccess chunk) {
+    private static void applyMaybeTransformLocked(final ChunkAccess chunk) {
+        if (!(chunk instanceof ProtoChunk)) {
+            AerofirmacraftTerrain.LOGGER.warn(
+                    "AFC locked v2: skipped non-ProtoChunk chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
+                    chunk.getPos().x,
+                    chunk.getPos().z,
+                    chunk.getClass().getName(),
+                    chunk.getPersistedStatus()
+            );
+            return;
+        }
+
+        final int lockAttemptIndex = AFC_LOCK_ATTEMPT_COUNT.incrementAndGet();
+
+        if (lockAttemptIndex <= LOCK_LOG_LIMIT) {
+            AerofirmacraftTerrain.LOGGER.info(
+                    "AFC locked v2: attempting section locks index={} chunkX={} chunkZ={} chunkStatus={}",
+                    lockAttemptIndex,
+                    chunk.getPos().x,
+                    chunk.getPos().z,
+                    chunk.getPersistedStatus()
+            );
+        }
+
+        final Set<LevelChunkSection> lockedSections = new HashSet<>();
+
+        for (LevelChunkSection section : chunk.getSections()) {
+            section.acquire();
+            lockedSections.add(section);
+        }
+
+        if (lockAttemptIndex <= LOCK_LOG_LIMIT) {
+            AerofirmacraftTerrain.LOGGER.info(
+                    "AFC locked v2: acquired section locks index={} chunkX={} chunkZ={} sectionCount={}",
+                    lockAttemptIndex,
+                    chunk.getPos().x,
+                    chunk.getPos().z,
+                    lockedSections.size()
+            );
+        }
+
+        try {
+            final int centerSurfaceY = getCenterSurfaceYUnlocked(chunk);
+            final int transformIndex = claimChunkForTransform(chunk, centerSurfaceY);
+
+            if (transformIndex > 0) {
+                applyFullChunkTransformUnlocked(chunk, centerSurfaceY, transformIndex);
+                chunk.setUnsaved(true);
+            }
+        } finally {
+            for (LevelChunkSection section : lockedSections) {
+                section.release();
+            }
+
+            if (lockAttemptIndex <= LOCK_LOG_LIMIT) {
+                AerofirmacraftTerrain.LOGGER.info(
+                        "AFC locked v2: released section locks index={} chunkX={} chunkZ={}",
+                        lockAttemptIndex,
+                        chunk.getPos().x,
+                        chunk.getPos().z
+                );
+            }
+        }
+    }
+
+    private static int getCenterSurfaceYUnlocked(final ChunkAccess chunk) {
         final int minY = chunk.getHeightAccessorForGeneration().getMinBuildHeight();
         final int maxY = chunk.getHeightAccessorForGeneration().getMaxBuildHeight() - 1;
         final int centerWorldX = chunk.getPos().getBlockX(8);
@@ -98,7 +173,7 @@ public abstract class TFCChunkGeneratorMixin {
                 afc$targetChunkZ = chunk.getPos().z;
 
                 AerofirmacraftTerrain.LOGGER.info(
-                        "AFC locked 9x9: selected target center chunkX={} chunkZ={} centerSurfaceY={}",
+                        "AFC locked v2: selected target center chunkX={} chunkZ={} centerSurfaceY={}",
                         afc$targetChunkX,
                         afc$targetChunkZ,
                         centerSurfaceY
@@ -123,37 +198,6 @@ public abstract class TFCChunkGeneratorMixin {
             }
 
             return AFC_TRANSFORM_COUNT.incrementAndGet();
-        }
-    }
-
-    private static void applyFullChunkTransformLocked(
-            final ChunkAccess chunk,
-            final int centerSurfaceY,
-            final int transformIndex
-    ) {
-        if (!(chunk instanceof ProtoChunk)) {
-            AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC locked 9x9: skipped non-ProtoChunk chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
-                    chunk.getPos().x,
-                    chunk.getPos().z,
-                    chunk.getClass().getName(),
-                    chunk.getPersistedStatus()
-            );
-            return;
-        }
-
-        final Set<LevelChunkSection> lockedSections = new HashSet<>();
-
-        for (LevelChunkSection section : chunk.getSections()) {
-            section.acquire();
-            lockedSections.add(section);
-        }
-
-        try {
-            applyFullChunkTransformUnlocked(chunk, centerSurfaceY, transformIndex);
-            chunk.setUnsaved(true);
-        } finally {
-            lockedSections.forEach(LevelChunkSection::release);
         }
     }
 
@@ -266,7 +310,7 @@ public abstract class TFCChunkGeneratorMixin {
         }
 
         AerofirmacraftTerrain.LOGGER.info(
-                "AFC locked 9x9: applied index={} chunkX={} chunkZ={} targetChunkX={} targetChunkZ={} centerX={} centerZ={} landLikeColumns={} lowColumns={} airBlocks={} crustBlocks={} waterBlocks={} surfaceY={}..{} undersideY={}..{} oceanCrustTopY={} oceanTopY={} centerSurfaceY={} centerUndersideY={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' oceanTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
+                "AFC locked v2: applied index={} chunkX={} chunkZ={} targetChunkX={} targetChunkZ={} centerX={} centerZ={} landLikeColumns={} lowColumns={} airBlocks={} crustBlocks={} waterBlocks={} surfaceY={}..{} undersideY={}..{} oceanCrustTopY={} oceanTopY={} centerSurfaceY={} centerUndersideY={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' oceanTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
                 transformIndex,
                 chunk.getPos().x,
                 chunk.getPos().z,
@@ -306,7 +350,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (skip <= SKIP_LOG_LIMIT) {
             AerofirmacraftTerrain.LOGGER.info(
-                    "AFC locked 9x9: skipped chunkX={} chunkZ={} centerSurfaceY={} reason={}",
+                    "AFC locked v2: skipped chunkX={} chunkZ={} centerSurfaceY={} reason={}",
                     chunk.getPos().x,
                     chunk.getPos().z,
                     centerSurfaceY,
@@ -314,7 +358,7 @@ public abstract class TFCChunkGeneratorMixin {
             );
         } else if (skip == SKIP_LOG_LIMIT + 1) {
             AerofirmacraftTerrain.LOGGER.info(
-                    "AFC locked 9x9: skip log limit reached. Further skip logs suppressed."
+                    "AFC locked v2: skip log limit reached. Further skip logs suppressed."
             );
         }
     }
