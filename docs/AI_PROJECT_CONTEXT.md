@@ -348,3 +348,15 @@ Changes:
 - keep LevelChunkSection acquire/release
 - keep direct LevelChunkSection get/set
 - reduce logs to first 12 detailed chunks and every 128 chunk summary
+
+## Current branch: terrain-tfc-noise-continuous-ocean-locked-v4-river-preserve
+
+Goal:
+Preserve rivers/lakes while keeping broad old-ocean regions as sky gaps.
+
+Changes:
+- keep continuous locked v3 foundation
+- classify low columns using nearby same-chunk land shape
+- preserve low columns that appear surrounded by land/opposite banks
+- carve only low columns classified as broad sky-gap/ocean
+- log landLikeColumns, preservedLowColumns, and skyGapColumns separately

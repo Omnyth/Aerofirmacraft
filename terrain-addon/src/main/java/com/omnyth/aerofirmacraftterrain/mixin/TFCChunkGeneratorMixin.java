@@ -30,7 +30,15 @@ public abstract class TFCChunkGeneratorMixin {
 
     private static final int OCEAN_CRUST_THICKNESS = 8;
 
-    private static final int DETAILED_LOG_LIMIT = 12;
+    // River/lake preservation heuristic.
+    private static final int RIVER_LOW_MIN_Y = 58;
+    private static final int RIVER_LOW_MAX_Y = 65;
+    private static final int RIVER_NEIGHBOR_RADIUS = 5;
+    private static final int RIVER_CARDINAL_HALF_WIDTH = 2;
+    private static final int RIVER_MIN_NEARBY_LAND_OPPOSITE = 8;
+    private static final int RIVER_MIN_NEARBY_LAND_SURROUNDED = 12;
+
+    private static final int DETAILED_LOG_LIMIT = 16;
     private static final int SUMMARY_LOG_INTERVAL = 128;
 
     private static final AtomicInteger AFC_TRANSFORM_COUNT = new AtomicInteger();
@@ -39,10 +47,11 @@ public abstract class TFCChunkGeneratorMixin {
     private static final AtomicLong AFC_TOTAL_CRUST_BLOCKS = new AtomicLong();
     private static final AtomicLong AFC_TOTAL_WATER_BLOCKS = new AtomicLong();
     private static final AtomicLong AFC_TOTAL_LAND_COLUMNS = new AtomicLong();
-    private static final AtomicLong AFC_TOTAL_LOW_COLUMNS = new AtomicLong();
+    private static final AtomicLong AFC_TOTAL_PRESERVED_LOW_COLUMNS = new AtomicLong();
+    private static final AtomicLong AFC_TOTAL_SKY_GAP_COLUMNS = new AtomicLong();
 
     @Inject(method = "fillFromNoise", at = @At("RETURN"), cancellable = true)
-    private void afc$continuousOceanLockedV3(
+    private void afc$continuousOceanLockedV4RiverPreserve(
             final Blender blender,
             final RandomState randomState,
             final StructureManager structureManager,
@@ -53,7 +62,7 @@ public abstract class TFCChunkGeneratorMixin {
 
         if (originalFuture == null) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC continuous locked v3: fillFromNoise returned null future for chunkX={} chunkZ={}",
+                    "AFC continuous locked v4: fillFromNoise returned null future for chunkX={} chunkZ={}",
                     chunk.getPos().x,
                     chunk.getPos().z
             );
@@ -65,7 +74,7 @@ public abstract class TFCChunkGeneratorMixin {
                 applyContinuousTransformLocked(result);
             } catch (Throwable throwable) {
                 AerofirmacraftTerrain.LOGGER.error(
-                        "AFC continuous locked v3: transform failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
+                        "AFC continuous locked v4: transform failed chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
                         result.getPos().x,
                         result.getPos().z,
                         result.getClass().getName(),
@@ -82,7 +91,7 @@ public abstract class TFCChunkGeneratorMixin {
     private static void applyContinuousTransformLocked(final ChunkAccess chunk) {
         if (!(chunk instanceof ProtoChunk)) {
             AerofirmacraftTerrain.LOGGER.warn(
-                    "AFC continuous locked v3: skipped non-ProtoChunk chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
+                    "AFC continuous locked v4: skipped non-ProtoChunk chunkX={} chunkZ={} chunkClass={} chunkStatus={}",
                     chunk.getPos().x,
                     chunk.getPos().z,
                     chunk.getClass().getName(),
@@ -122,8 +131,14 @@ public abstract class TFCChunkGeneratorMixin {
         final BlockState stone = Blocks.STONE.defaultBlockState();
         final BlockState water = Blocks.WATER.defaultBlockState();
 
+        final int[][] surfaceMap = new int[16][16];
+        final boolean[][] landLikeMap = new boolean[16][16];
+        final boolean[][] preserveLowMap = new boolean[16][16];
+
         int landLikeColumns = 0;
-        int lowColumns = 0;
+        int preservedLowColumns = 0;
+        int skyGapColumns = 0;
+
         int airBlocks = 0;
         int crustBlocks = 0;
         int waterBlocks = 0;
@@ -137,6 +152,9 @@ public abstract class TFCChunkGeneratorMixin {
 
         final int oceanCrustTopY = minY + OCEAN_CRUST_THICKNESS;
 
+        // First pass:
+        // - write the lower ocean/crust
+        // - capture original-ish column surface classification
         for (int localX = 0; localX < 16; localX++) {
             for (int localZ = 0; localZ < 16; localZ++) {
                 for (int y = minY; y <= oceanCrustTopY; y++) {
@@ -156,25 +174,36 @@ public abstract class TFCChunkGeneratorMixin {
 
                 final int surfaceY = findTopNonAirY(chunk, localX, localZ, minY, maxY);
 
+                surfaceMap[localX][localZ] = surfaceY;
+                landLikeMap[localX][localZ] = surfaceY >= LAND_TRIGGER_SURFACE_Y;
+
                 minSurfaceY = Math.min(minSurfaceY, surfaceY);
                 maxSurfaceY = Math.max(maxSurfaceY, surfaceY);
 
                 if (localX == 8 && localZ == 8) {
                     centerSurfaceY = surfaceY;
                 }
+            }
+        }
 
-                if (surfaceY < LAND_TRIGGER_SURFACE_Y) {
-                    lowColumns++;
+        // Second pass:
+        // - classify low columns as river/lake-like if surrounded by land
+        for (int localX = 0; localX < 16; localX++) {
+            for (int localZ = 0; localZ < 16; localZ++) {
+                if (!landLikeMap[localX][localZ]) {
+                    preserveLowMap[localX][localZ] = shouldPreserveLowColumn(surfaceMap, landLikeMap, localX, localZ);
+                }
+            }
+        }
 
-                    final int carveTopY = clamp(surfaceY + 6, GLOBAL_OCEAN_TOP_Y + 1, maxY);
+        // Third pass:
+        // - carve islands/gaps
+        // - preserve river/lake-like low columns inside landmasses
+        for (int localX = 0; localX < 16; localX++) {
+            for (int localZ = 0; localZ < 16; localZ++) {
+                final int surfaceY = surfaceMap[localX][localZ];
 
-                    for (int y = GLOBAL_OCEAN_TOP_Y + 1; y <= carveTopY; y++) {
-                        if (!getBlockStateUnlocked(chunk, localX, y, localZ).isAir()) {
-                            setBlockStateUnlocked(chunk, localX, y, localZ, air);
-                            airBlocks++;
-                        }
-                    }
-                } else {
+                if (landLikeMap[localX][localZ]) {
                     landLikeColumns++;
 
                     final int worldX = chunk.getPos().getBlockX(localX);
@@ -190,6 +219,21 @@ public abstract class TFCChunkGeneratorMixin {
                     if (localX == 8 && localZ == 8) {
                         centerUndersideY = undersideY;
                     }
+
+                    for (int y = GLOBAL_OCEAN_TOP_Y + 1; y <= carveTopY; y++) {
+                        if (!getBlockStateUnlocked(chunk, localX, y, localZ).isAir()) {
+                            setBlockStateUnlocked(chunk, localX, y, localZ, air);
+                            airBlocks++;
+                        }
+                    }
+                } else if (preserveLowMap[localX][localZ]) {
+                    preservedLowColumns++;
+                    // Preserve river/lake-like terrain columns inside landmasses.
+                    // This keeps TFC surface water and riverbed support instead of carving them into sky gaps.
+                } else {
+                    skyGapColumns++;
+
+                    final int carveTopY = clamp(surfaceY + 6, GLOBAL_OCEAN_TOP_Y + 1, maxY);
 
                     for (int y = GLOBAL_OCEAN_TOP_Y + 1; y <= carveTopY; y++) {
                         if (!getBlockStateUnlocked(chunk, localX, y, localZ).isAir()) {
@@ -218,18 +262,20 @@ public abstract class TFCChunkGeneratorMixin {
         AFC_TOTAL_CRUST_BLOCKS.addAndGet(crustBlocks);
         AFC_TOTAL_WATER_BLOCKS.addAndGet(waterBlocks);
         AFC_TOTAL_LAND_COLUMNS.addAndGet(landLikeColumns);
-        AFC_TOTAL_LOW_COLUMNS.addAndGet(lowColumns);
+        AFC_TOTAL_PRESERVED_LOW_COLUMNS.addAndGet(preservedLowColumns);
+        AFC_TOTAL_SKY_GAP_COLUMNS.addAndGet(skyGapColumns);
 
         if (transformIndex <= DETAILED_LOG_LIMIT) {
             AerofirmacraftTerrain.LOGGER.info(
-                    "AFC continuous locked v3: applied index={} chunkX={} chunkZ={} centerX={} centerZ={} landLikeColumns={} lowColumns={} airBlocks={} crustBlocks={} waterBlocks={} surfaceY={}..{} undersideY={}..{} oceanCrustTopY={} oceanTopY={} centerSurfaceY={} centerUndersideY={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' oceanTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
+                    "AFC continuous locked v4: applied index={} chunkX={} chunkZ={} centerX={} centerZ={} landLikeColumns={} preservedLowColumns={} skyGapColumns={} airBlocks={} crustBlocks={} waterBlocks={} surfaceY={}..{} undersideY={}..{} oceanCrustTopY={} oceanTopY={} centerSurfaceY={} centerUndersideY={} chunkStatus={} chunkClass={} surfaceTp='/tp @s {} {} {}' oceanTp='/tp @s {} {} {}' undersideTp='/tp @s {} {} {}'",
                     transformIndex,
                     chunk.getPos().x,
                     chunk.getPos().z,
                     centerWorldX,
                     centerWorldZ,
                     landLikeColumns,
-                    lowColumns,
+                    preservedLowColumns,
+                    skyGapColumns,
                     airBlocks,
                     crustBlocks,
                     waterBlocks,
@@ -255,18 +301,87 @@ public abstract class TFCChunkGeneratorMixin {
             );
         } else if (transformIndex % SUMMARY_LOG_INTERVAL == 0) {
             AerofirmacraftTerrain.LOGGER.info(
-                    "AFC continuous locked v3 summary: chunks={} latestChunkX={} latestChunkZ={} totalLandColumns={} totalLowColumns={} totalAirBlocks={} totalCrustBlocks={} totalWaterBlocks={} latestStatus={}",
+                    "AFC continuous locked v4 summary: chunks={} latestChunkX={} latestChunkZ={} totalLandColumns={} totalPreservedLowColumns={} totalSkyGapColumns={} totalAirBlocks={} totalCrustBlocks={} totalWaterBlocks={} latestStatus={}",
                     transformIndex,
                     chunk.getPos().x,
                     chunk.getPos().z,
                     AFC_TOTAL_LAND_COLUMNS.get(),
-                    AFC_TOTAL_LOW_COLUMNS.get(),
+                    AFC_TOTAL_PRESERVED_LOW_COLUMNS.get(),
+                    AFC_TOTAL_SKY_GAP_COLUMNS.get(),
                     AFC_TOTAL_AIR_BLOCKS.get(),
                     AFC_TOTAL_CRUST_BLOCKS.get(),
                     AFC_TOTAL_WATER_BLOCKS.get(),
                     chunk.getPersistedStatus()
             );
         }
+    }
+
+    private static boolean shouldPreserveLowColumn(
+            final int[][] surfaceMap,
+            final boolean[][] landLikeMap,
+            final int localX,
+            final int localZ
+    ) {
+        final int surfaceY = surfaceMap[localX][localZ];
+
+        if (surfaceY < RIVER_LOW_MIN_Y || surfaceY > RIVER_LOW_MAX_Y) {
+            return false;
+        }
+
+        int nearbyLand = 0;
+
+        boolean north = false;
+        boolean south = false;
+        boolean west = false;
+        boolean east = false;
+
+        for (int dx = -RIVER_NEIGHBOR_RADIUS; dx <= RIVER_NEIGHBOR_RADIUS; dx++) {
+            for (int dz = -RIVER_NEIGHBOR_RADIUS; dz <= RIVER_NEIGHBOR_RADIUS; dz++) {
+                if (dx == 0 && dz == 0) {
+                    continue;
+                }
+
+                final int nx = localX + dx;
+                final int nz = localZ + dz;
+
+                if (nx < 0 || nx >= 16 || nz < 0 || nz >= 16) {
+                    continue;
+                }
+
+                if (!landLikeMap[nx][nz]) {
+                    continue;
+                }
+
+                nearbyLand++;
+
+                if (dz < 0 && Math.abs(dx) <= RIVER_CARDINAL_HALF_WIDTH) {
+                    north = true;
+                }
+
+                if (dz > 0 && Math.abs(dx) <= RIVER_CARDINAL_HALF_WIDTH) {
+                    south = true;
+                }
+
+                if (dx < 0 && Math.abs(dz) <= RIVER_CARDINAL_HALF_WIDTH) {
+                    west = true;
+                }
+
+                if (dx > 0 && Math.abs(dz) <= RIVER_CARDINAL_HALF_WIDTH) {
+                    east = true;
+                }
+            }
+        }
+
+        final boolean oppositeBanks = (north && south) || (west && east);
+
+        int directionCount = 0;
+        if (north) directionCount++;
+        if (south) directionCount++;
+        if (west) directionCount++;
+        if (east) directionCount++;
+
+        return (oppositeBanks && nearbyLand >= RIVER_MIN_NEARBY_LAND_OPPOSITE)
+                || (directionCount >= 3 && nearbyLand >= RIVER_MIN_NEARBY_LAND_SURROUNDED);
     }
 
     private static BlockState getBlockStateUnlocked(
