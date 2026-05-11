@@ -16,10 +16,10 @@ public final class AerofirmacraftTerrain {
         AFCBiomes.register(modEventBus);
         modEventBus.addListener(this::commonSetup);
 
-        LOGGER.info("Aerofirmacraft Terrain constructed. V33 no-transform layered generation active.");
+        LOGGER.info("Aerofirmacraft Terrain constructed. V33b no-transform layered generation active.");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        LOGGER.info("Aerofirmacraft Terrain common setup complete. V33 hooks ChunkNoiseFiller block-state decisions.");
+        LOGGER.info("Aerofirmacraft Terrain common setup complete. V33b hooks ChunkNoiseFiller block-state decisions.");
     }
 }
