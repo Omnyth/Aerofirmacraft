@@ -183,3 +183,10 @@ idea {
 dependencies {
     compileOnly files("C:/Users/omnyt/curseforge/minecraft/Instances/Aerofirmacraft/mods/TerraFirmaCraft-NeoForge-1.21.1-4.1.1.jar")
 }
+// TFC_GENERATION_BANDS_NAME_BLOCK_START
+version = "0.1.0-dev.2"
+
+base {
+    archivesName = "tfc_generation_bands"
+}
+// TFC_GENERATION_BANDS_NAME_BLOCK_END
