@@ -16,10 +16,10 @@ public final class AerofirmacraftTerrain {
         AFCBiomes.register(modEventBus);
         modEventBus.addListener(this::commonSetup);
 
-        LOGGER.info("Aerofirmacraft Terrain constructed. V32 complete lower-world prototype active.");
+        LOGGER.info("Aerofirmacraft Terrain constructed. V32c complete lower-world prototype active.");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        LOGGER.info("Aerofirmacraft Terrain common setup complete. V32 global lower sea, air gap, and island underside prototype.");
+        LOGGER.info("Aerofirmacraft Terrain common setup complete. V32c global lower sea, air gap, and island underside prototype.");
     }
 }

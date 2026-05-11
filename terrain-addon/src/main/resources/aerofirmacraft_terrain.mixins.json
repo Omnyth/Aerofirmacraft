@@ -4,8 +4,7 @@
   "package": "com.omnyth.aerofirmacraftterrain.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "TFCChunkGeneratorMixin",
-    "accessor.LevelChunkSectionAccessor"
+    "TFCChunkGeneratorMixin"
   ],
   "client": [],
   "injectors": {
