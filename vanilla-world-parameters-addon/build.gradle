@@ -13,7 +13,7 @@ tasks.named('wrapper', Wrapper).configure {
     distributionType = Wrapper.DistributionType.BIN
 }
 
-version = "0.1.0-dev.2"
+version = "0.1.0-dev.3"
 group = mod_group_id
 
 sourceSets.main.resources {
@@ -184,7 +184,7 @@ dependencies {
     compileOnly files("C:/Users/omnyt/curseforge/minecraft/Instances/Aerofirmacraft/mods/TerraFirmaCraft-NeoForge-1.21.1-4.1.1.jar")
 }
 // VANILLA_WORLD_PARAMETERS_NAME_BLOCK_START
-version = "0.1.0-dev.2"
+version = "0.1.0-dev.3"
 
 base {
     archivesName = "vanilla_world_parameters"
