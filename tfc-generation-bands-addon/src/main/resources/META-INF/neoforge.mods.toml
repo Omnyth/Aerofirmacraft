@@ -1,0 +1,34 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="MIT"
+
+[[mods]]
+modId="afc_tfc_generation_bands"
+version="0.1.0-dev.1"
+displayName="AFC TFC Generation Bands"
+authors="Omnyth"
+description="Standalone vertical generation-band controls for TerraFirmaCraft-based world generation."
+
+[[mixins]]
+config="afc_tfc_generation_bands.mixins.json"
+
+[[dependencies.afc_tfc_generation_bands]]
+modId="neoforge"
+type="required"
+versionRange="[21.1,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.afc_tfc_generation_bands]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1,1.22)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.afc_tfc_generation_bands]]
+modId="tfc"
+type="required"
+versionRange="[4.1.1,)"
+ordering="AFTER"
+side="BOTH"

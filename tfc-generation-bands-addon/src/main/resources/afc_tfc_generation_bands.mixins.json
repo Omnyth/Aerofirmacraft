@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.omnyth.afctfcgenerationbands.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "TFCChunkGeneratorMixin"
+  ],
+  "client": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
