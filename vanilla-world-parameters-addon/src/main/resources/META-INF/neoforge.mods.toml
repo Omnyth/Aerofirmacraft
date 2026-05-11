@@ -4,7 +4,7 @@ license = "MIT"
 
 [[mods]]
 modId = "vanilla_world_parameters"
-version = "0.1.0-dev.4"
+version = "0.1.0-dev.7"
 displayName = "Vanilla World Parameters"
 authors = "Omnyth"
 description = "Standalone Minecraft dimension/world parameter overrides for new worlds."

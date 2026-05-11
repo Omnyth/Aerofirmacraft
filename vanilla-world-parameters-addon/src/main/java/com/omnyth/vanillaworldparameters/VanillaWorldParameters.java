@@ -14,7 +14,7 @@ public final class VanillaWorldParameters {
     public VanillaWorldParameters(final IEventBus modEventBus) {
         modEventBus.addListener(this::commonSetup);
 
-        LOGGER.info("Vanilla World Parameters constructed. V4 overworld dimension type target: min_y=-256 height=576 maxY=319.");
+        LOGGER.info("Vanilla World Parameters constructed. V7 overworld dimension type target: min_y=-256 height=576 maxY=319.");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
