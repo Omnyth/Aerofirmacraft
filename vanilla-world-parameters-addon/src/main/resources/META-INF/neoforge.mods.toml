@@ -1,0 +1,24 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="MIT"
+
+[[mods]]
+modId="vanilla_world_parameters"
+version="0.1.0-dev.1"
+displayName="Vanilla World Parameters"
+authors="Omnyth"
+description="Standalone Minecraft dimension/world parameter overrides for new worlds."
+
+[[dependencies.vanilla_world_parameters]]
+modId="neoforge"
+type="required"
+versionRange="[21.1,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.vanilla_world_parameters]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1,1.22)"
+ordering="NONE"
+side="BOTH"
