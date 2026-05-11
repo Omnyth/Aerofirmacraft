@@ -45,7 +45,7 @@ public final class AFCBiomes {
 
     private AFCBiomes() {}
 
-    public static void register(IEventBus modEventBus) {
+    public static void register(final IEventBus modEventBus) {
         EXTENSIONS.register(modEventBus);
     }
 }

@@ -12,15 +12,14 @@ public final class AerofirmacraftTerrain {
     public static final String MODID = "aerofirmacraft_terrain";
     public static final Logger LOGGER = LogUtils.getLogger();
 
-    public AerofirmacraftTerrain(IEventBus modEventBus) {
+    public AerofirmacraftTerrain(final IEventBus modEventBus) {
         AFCBiomes.register(modEventBus);
-
         modEventBus.addListener(this::commonSetup);
 
-        LOGGER.info("Aerofirmacraft Terrain constructed. Lower ocean dev 0.1.0-dev.29 active.");
+        LOGGER.info("Aerofirmacraft Terrain constructed. V32 complete lower-world prototype active.");
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        LOGGER.info("Aerofirmacraft Terrain common setup complete. V29 ocean/coast locator corrected logging active.");
+        LOGGER.info("Aerofirmacraft Terrain common setup complete. V32 global lower sea, air gap, and island underside prototype.");
     }
 }
